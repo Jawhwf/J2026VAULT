@@ -2,11 +2,12 @@
 
 const DISCORD_INVITE = 'https://discord.gg/J2026Vault';
 const TELEGRAM_LINK = 'https://t.me/J2026Vault';
+const TELEGRAM_BOT_LINK = 'https://t.me/J2026VaultBot';
 const CHARLEY_PANGUS_LOGO = 'assets/charley-pangus-logo.gif';
 
 /* Vault owner — only this Telegram account can unlock Vault Admin.
    Open the Mini App in Telegram → owner ID/username is detected → password prompt.
-   Local testing (browser): append ?vault_owner=1 to the URL (still asks for password). */
+   Local testing (browser): append ?vault_owner=1 to bypass the Telegram gate + unlock owner tools. */
 const VAULT_OWNER_TELEGRAM_IDS = [6690519994];
 const VAULT_OWNER_TELEGRAM_USERNAMES = []; // optional: ['your_username']
 const VAULT_ADMIN_PASSWORD = 'JAWH2005!';
@@ -839,6 +840,45 @@ function initTelegramUser() {
   if (!user) return;
   telegramUser = user;
   syncProfileFromTelegram(user);
+}
+
+function hasTelegramIdentity() {
+  if (!telegramUser) return false;
+  const id = Number(telegramUser.id);
+  if (Number.isFinite(id) && id > 0) return true;
+  if (telegramUser.username && String(telegramUser.username).trim()) return true;
+  return false;
+}
+
+function isTelegramGateBypassed() {
+  return isVaultOwnerDevOverride();
+}
+
+function shouldShowTelegramGate() {
+  if (isTelegramGateBypassed()) return false;
+  return !hasTelegramIdentity();
+}
+
+function showTelegramGate() {
+  const gate = document.getElementById('telegramGate');
+  const openBtn = document.getElementById('telegramGateOpenBtn');
+  if (openBtn) openBtn.href = TELEGRAM_BOT_LINK;
+  if (gate) {
+    gate.hidden = false;
+    gate.setAttribute('aria-hidden', 'false');
+  }
+  document.body.classList.add('tg-gate-active');
+  document.body.classList.remove('splash-active');
+  document.getElementById('splash')?.remove();
+}
+
+function hideTelegramGate() {
+  const gate = document.getElementById('telegramGate');
+  if (gate) {
+    gate.hidden = true;
+    gate.setAttribute('aria-hidden', 'true');
+  }
+  document.body.classList.remove('tg-gate-active');
 }
 
 function syncProfileFromTelegram(user) {
@@ -5003,6 +5043,13 @@ function initApp() {
   persistVaultOwnerDevOverride();
   vaultAdminUnlocked = readVaultAdminUnlock();
   initTelegramUser();
+
+  if (shouldShowTelegramGate()) {
+    showTelegramGate();
+    return false;
+  }
+
+  hideTelegramGate();
   applyVaultAdminAccess();
   loadCatalogProducts();
   loadProfileName();
@@ -5018,20 +5065,25 @@ function initApp() {
   startCarousel();
   renderAdminPanel();
   setupProductIntroHover();
+  return true;
 }
 
 async function runSplash() {
   const splash = document.getElementById('splash');
   const statusEl = document.getElementById('splashStatus');
   const tipEl = document.getElementById('splashTip');
+
+  const finishWithoutSplash = () => {
+    const ready = initApp();
+    if (ready) maybePromptOwnerPassword();
+  };
+
   if (!splash) {
-    initApp();
-    maybePromptOwnerPassword();
+    finishWithoutSplash();
     return;
   }
 
   const started = performance.now();
-  let slowMode = false;
   let tipIndex = 0;
   let tipTimer = null;
 
@@ -5042,18 +5094,24 @@ async function runSplash() {
   };
 
   const slowTimer = setTimeout(() => {
-    slowMode = true;
     statusEl.textContent = 'Taking longer than expected — please wait…';
     showTip();
     tipTimer = setInterval(showTip, 4500);
   }, SPLASH_SLOW_MS);
 
+  let ready = false;
   try {
     if (document.fonts?.ready) await document.fonts.ready;
-    initApp();
+    ready = initApp();
     await wait(0);
   } catch (err) {
     console.error('Splash init error:', err);
+  }
+
+  if (!ready) {
+    clearTimeout(slowTimer);
+    if (tipTimer) clearInterval(tipTimer);
+    return;
   }
 
   const elapsed = performance.now() - started;
