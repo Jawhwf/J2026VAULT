@@ -7,7 +7,8 @@ const CHARLEY_PANGUS_LOGO = 'assets/charley-pangus-logo.gif';
 
 /* Vault owner — only this Telegram account can unlock Vault Admin.
    Open the Mini App in Telegram → owner ID/username is detected → password prompt.
-   Local testing (browser): append ?vault_owner=1 to bypass the Telegram gate + unlock owner tools. */
+   Browser visits (including https://jawhwf.github.io/J2026VAULT/) are gated.
+   Local testing only: open via localhost/file + ?vault_owner=1 to bypass the gate. */
 const VAULT_OWNER_TELEGRAM_IDS = [6690519994];
 const VAULT_OWNER_TELEGRAM_USERNAMES = []; // optional: ['your_username']
 const VAULT_ADMIN_PASSWORD = 'JAWH2005!';
@@ -834,8 +835,10 @@ function canAccessVaultAdmin() {
 function initTelegramUser() {
   const tg = window.Telegram?.WebApp;
   if (!tg) return;
-  tg.ready();
-  tg.expand();
+  try {
+    tg.ready();
+    tg.expand();
+  } catch {}
   const user = tg.initDataUnsafe?.user;
   if (!user) return;
   telegramUser = user;
@@ -850,13 +853,30 @@ function hasTelegramIdentity() {
   return false;
 }
 
+/** True only inside a real Telegram Mini App session (not a normal browser tab). */
+function isInsideTelegramMiniApp() {
+  const tg = window.Telegram?.WebApp;
+  if (!tg) return false;
+  // initData is only populated when Telegram launches the Mini App
+  if (!tg.initData || !String(tg.initData).trim()) return false;
+  return hasTelegramIdentity();
+}
+
+function isLocalDevHost() {
+  const host = (window.location.hostname || '').toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '';
+}
+
 function isTelegramGateBypassed() {
-  return isVaultOwnerDevOverride();
+  // Owner bypass only on local files / localhost — never on the public GitHub Pages URL
+  return isLocalDevHost() && isVaultOwnerDevOverride();
 }
 
 function shouldShowTelegramGate() {
   if (isTelegramGateBypassed()) return false;
-  return !hasTelegramIdentity();
+  // Blocks browser visits to https://jawhwf.github.io/J2026VAULT/ (and any other host)
+  // unless Telegram actually opened the Mini App with a signed user session.
+  return !isInsideTelegramMiniApp();
 }
 
 function showTelegramGate() {
