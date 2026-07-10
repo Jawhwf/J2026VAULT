@@ -6574,6 +6574,150 @@ body.plans-view .content {
   color: #fecaca;
 }
 
+/* ── Telegram gate (outside Mini App) ── */
+body.tg-gate-active {
+  overflow: hidden;
+}
+body.tg-gate-active .backdrop,
+body.tg-gate-active .splash {
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+.tg-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    radial-gradient(ellipse 70% 55% at 70% 18%, rgba(139, 92, 246, 0.22), transparent 60%),
+    radial-gradient(ellipse 50% 40% at 20% 80%, rgba(109, 64, 224, 0.12), transparent 55%),
+    #07070a;
+}
+.tg-gate[hidden] {
+  display: none !important;
+}
+.tg-gate-glow {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle at 50% 40%, rgba(167, 139, 250, 0.08), transparent 45%);
+}
+.tg-gate-card {
+  position: relative;
+  width: min(100%, 420px);
+  padding: 28px 26px 24px;
+  border-radius: 28px;
+  background: linear-gradient(180deg, #16161d 0%, #121218 100%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow:
+    0 30px 80px -36px rgba(0, 0, 0, 0.85),
+    0 0 0 1px rgba(139, 92, 246, 0.08) inset;
+  animation: tg-gate-in 0.45s var(--ease) both;
+}
+@keyframes tg-gate-in {
+  from { opacity: 0; transform: translateY(14px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.tg-gate-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.tg-gate-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(167, 139, 250, 0.55);
+  color: var(--accent-bright);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  background: rgba(139, 92, 246, 0.08);
+}
+.tg-gate-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-2);
+}
+.tg-gate-title {
+  font-size: clamp(28px, 6vw, 34px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  color: var(--text);
+  margin-bottom: 12px;
+}
+.tg-gate-desc {
+  font-size: 15px;
+  line-height: 1.55;
+  color: rgba(242, 242, 245, 0.78);
+  margin-bottom: 22px;
+}
+.tg-gate-features {
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  margin-bottom: 22px;
+}
+.tg-gate-features li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.035);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  color: rgba(242, 242, 245, 0.88);
+  font-size: 14px;
+  font-weight: 500;
+}
+.tg-gate-feature-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--accent-bright);
+  background: rgba(139, 92, 246, 0.14);
+  border: 1px solid rgba(167, 139, 250, 0.28);
+}
+.tg-gate-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 52px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #a78bfa 0%, #8b5cf6 55%, #6d40e0 100%);
+  color: #0b0b0e;
+  font-size: 15px;
+  font-weight: 800;
+  text-decoration: none;
+  letter-spacing: -0.01em;
+  box-shadow: 0 14px 36px -16px rgba(139, 92, 246, 0.75);
+  transition: transform 0.15s var(--ease), filter 0.2s;
+}
+.tg-gate-cta:hover {
+  filter: brightness(1.06);
+}
+.tg-gate-cta:active {
+  transform: scale(0.985);
+}
+
 /* ── Water splash (loading screen) ── */
 body.splash-active { overflow: hidden; }
 body.splash-active .backdrop { visibility: hidden; }
