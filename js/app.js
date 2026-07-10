@@ -7,8 +7,8 @@ const CHARLEY_PANGUS_LOGO = 'assets/charley-pangus-logo.gif';
 
 /* Vault owner — only this Telegram account can unlock Vault Admin.
    Open the Mini App in Telegram → owner ID/username is detected → password prompt.
-   Browser visits (including https://jawhwf.github.io/J2026VAULT/) are gated.
-   Local testing only: open via localhost/file + ?vault_owner=1 to bypass the gate. */
+   Browser visits to https://jawhwf.github.io/J2026VAULT/ are gated.
+   TEMP: local/file opens skip the gate for editing — reclose when user asks. */
 const VAULT_OWNER_TELEGRAM_IDS = [6690519994];
 const VAULT_OWNER_TELEGRAM_USERNAMES = []; // optional: ['your_username']
 const VAULT_ADMIN_PASSWORD = 'JAWH2005!';
@@ -16,6 +16,7 @@ const VAULT_ADMIN_UNLOCK_KEY = 'j2026vault_admin_unlocked';
 
 let telegramUser = null;
 let vaultAdminUnlocked = false;
+let vaultAdminPromptDismissed = false;
 const PROFILE_NAME_KEY = 'j2026vault_profile_name';
 
 /* NOTE: these are placeholder EXAMPLES to demonstrate the template layout.
@@ -876,8 +877,10 @@ function isLocalDevHost() {
 }
 
 function isTelegramGateBypassed() {
-  // Owner bypass only on local files / localhost — never on the public GitHub Pages URL
-  return isLocalDevHost() && isVaultOwnerDevOverride();
+  // TEMP: local/file always open for editing. Public GitHub URL stays gated.
+  // Re-enable local gate later when user asks to "reclose" it.
+  if (isLocalDevHost()) return true;
+  return false;
 }
 
 function shouldShowTelegramGate() {
@@ -942,18 +945,15 @@ function syncProfileFromTelegram(user) {
 
 function applyVaultAdminAccess() {
   const adminBtn = document.getElementById('openVaultAdminBtn');
-  const isOwner = isVaultOwnerIdentity();
+  // Only the unlocked owner sees Vault Admin. Other users never see it.
+  // Owner who closes the password prompt without unlocking also won't see it.
   const canAdmin = canAccessVaultAdmin();
 
   if (adminBtn) {
-    adminBtn.hidden = !isOwner;
-    adminBtn.classList.toggle('is-locked', isOwner && !canAdmin);
+    adminBtn.hidden = !canAdmin;
+    adminBtn.classList.remove('is-locked');
     const sub = adminBtn.querySelector('.admin-entry-sub');
-    if (sub) {
-      sub.textContent = canAdmin
-        ? 'Add, edit, and publish listings'
-        : 'Owner verified — enter password to unlock';
-    }
+    if (sub) sub.textContent = 'Add, edit, and publish listings';
   }
 }
 
@@ -983,6 +983,15 @@ function closeAdminPasswordModal() {
   if (input) input.value = '';
 }
 
+function dismissAdminPasswordPrompt() {
+  // Owner closed without unlocking — hide Vault Admin for this session
+  vaultAdminPromptDismissed = true;
+  const overlay = document.getElementById('adminPasswordModal');
+  if (overlay) delete overlay.dataset.enterAdmin;
+  closeAdminPasswordModal();
+  applyVaultAdminAccess();
+}
+
 function submitAdminPassword() {
   const input = document.getElementById('adminPasswordInput');
   const errorEl = document.getElementById('adminPasswordError');
@@ -999,6 +1008,7 @@ function submitAdminPassword() {
   }
   const enterAdmin = overlay?.dataset.enterAdmin === '1';
   if (overlay) delete overlay.dataset.enterAdmin;
+  vaultAdminPromptDismissed = false;
   writeVaultAdminUnlock(true);
   closeAdminPasswordModal();
   applyVaultAdminAccess();
@@ -1016,6 +1026,7 @@ function promptVaultAdminUnlock({ enterAdmin = false } = {}) {
     if (enterAdmin) showView('admin');
     return;
   }
+  vaultAdminPromptDismissed = false;
   openAdminPasswordModal();
   const overlay = document.getElementById('adminPasswordModal');
   if (!overlay || !enterAdmin) return;
@@ -1025,6 +1036,7 @@ function promptVaultAdminUnlock({ enterAdmin = false } = {}) {
 function maybePromptOwnerPassword() {
   if (!isVaultOwnerIdentity()) return;
   if (vaultAdminUnlocked) return;
+  if (vaultAdminPromptDismissed) return;
   openAdminPasswordModal({ focus: true });
 }
 
@@ -4404,24 +4416,18 @@ document.getElementById('adminBackBtn')?.addEventListener('click', () => showVie
 
 document.getElementById('adminPasswordSubmit')?.addEventListener('click', () => submitAdminPassword());
 document.getElementById('adminPasswordClose')?.addEventListener('click', () => {
-  const overlay = document.getElementById('adminPasswordModal');
-  if (overlay) delete overlay.dataset.enterAdmin;
-  closeAdminPasswordModal();
+  dismissAdminPasswordPrompt();
 });
 document.getElementById('adminPasswordModal')?.addEventListener('click', (e) => {
   if (e.target?.id !== 'adminPasswordModal') return;
-  const overlay = document.getElementById('adminPasswordModal');
-  if (overlay) delete overlay.dataset.enterAdmin;
-  closeAdminPasswordModal();
+  dismissAdminPasswordPrompt();
 });
 document.getElementById('adminPasswordInput')?.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
     submitAdminPassword();
   } else if (e.key === 'Escape') {
-    const overlay = document.getElementById('adminPasswordModal');
-    if (overlay) delete overlay.dataset.enterAdmin;
-    closeAdminPasswordModal();
+    dismissAdminPasswordPrompt();
   }
 });
 editorDeleteBtn?.addEventListener('click', () => {

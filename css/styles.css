@@ -3050,11 +3050,12 @@ body.plans-view .content {
   pointer-events: auto;
 }
 .admin-pass-sheet {
+  position: relative;
   width: min(100%, 360px);
   background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-lg);
-  padding: 22px 20px 20px;
+  padding: 26px 20px 20px;
   box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.75);
   transform: translateY(12px) scale(0.98);
   transition: transform 0.28s var(--ease);
@@ -3062,12 +3063,16 @@ body.plans-view .content {
 .admin-pass-overlay.open .admin-pass-sheet {
   transform: translateY(0) scale(1);
 }
-.admin-pass-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 8px;
+.admin-pass-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 1;
+}
+.admin-pass-intro {
+  text-align: center;
+  padding: 4px 28px 0;
+  margin-bottom: 20px;
 }
 .admin-pass-eyebrow {
   font-size: 10px;
@@ -3075,17 +3080,20 @@ body.plans-view .content {
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--accent-bright);
-  margin-bottom: 4px;
+  margin-bottom: 8px;
 }
-.admin-pass-head h2 {
-  font-size: 20px;
+.admin-pass-intro h2 {
+  font-size: 22px;
   font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0;
 }
 .admin-pass-sub {
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.55;
   color: var(--text-muted);
-  margin-bottom: 16px;
+  margin: 10px auto 0;
+  max-width: 240px;
 }
 .admin-pass-label {
   display: block;
