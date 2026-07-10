@@ -836,6 +836,7 @@ function writeVaultAdminUnlock(unlocked) {
 }
 
 function canAccessVaultAdmin() {
+  if (vaultAdminPromptDismissed) return false;
   return isVaultOwnerIdentity() && vaultAdminUnlocked;
 }
 
@@ -945,12 +946,13 @@ function syncProfileFromTelegram(user) {
 
 function applyVaultAdminAccess() {
   const adminBtn = document.getElementById('openVaultAdminBtn');
-  // Only the unlocked owner sees Vault Admin. Other users never see it.
-  // Owner who closes the password prompt without unlocking also won't see it.
-  const canAdmin = canAccessVaultAdmin();
+  // Only show after the owner unlocks with the password.
+  // Closing the prompt without unlocking keeps this hidden until a full reload.
+  const canAdmin = canAccessVaultAdmin() && !vaultAdminPromptDismissed;
 
   if (adminBtn) {
     adminBtn.hidden = !canAdmin;
+    adminBtn.setAttribute('aria-hidden', canAdmin ? 'false' : 'true');
     adminBtn.classList.remove('is-locked');
     const sub = adminBtn.querySelector('.admin-entry-sub');
     if (sub) sub.textContent = 'Add, edit, and publish listings';
@@ -984,11 +986,18 @@ function closeAdminPasswordModal() {
 }
 
 function dismissAdminPasswordPrompt() {
-  // Owner closed without unlocking — hide Vault Admin for this session
+  // First close without unlocking → hide Vault Admin until the Mini App is fully reloaded
   vaultAdminPromptDismissed = true;
+  writeVaultAdminUnlock(false);
   const overlay = document.getElementById('adminPasswordModal');
   if (overlay) delete overlay.dataset.enterAdmin;
   closeAdminPasswordModal();
+
+  const adminBtn = document.getElementById('openVaultAdminBtn');
+  if (adminBtn) {
+    adminBtn.hidden = true;
+    adminBtn.setAttribute('aria-hidden', 'true');
+  }
   applyVaultAdminAccess();
 }
 
@@ -1022,11 +1031,14 @@ function promptVaultAdminUnlock({ enterAdmin = false } = {}) {
     showToast('Vault Admin is only available to the vault owner');
     return;
   }
-  if (vaultAdminUnlocked) {
+  if (vaultAdminUnlocked && !vaultAdminPromptDismissed) {
     if (enterAdmin) showView('admin');
     return;
   }
-  vaultAdminPromptDismissed = false;
+  if (vaultAdminPromptDismissed) {
+    applyVaultAdminAccess();
+    return;
+  }
   openAdminPasswordModal();
   const overlay = document.getElementById('adminPasswordModal');
   if (!overlay || !enterAdmin) return;
@@ -3747,6 +3759,7 @@ function showView(name) {
   if (name === 'purchases') purchasesSeenCount = library.size;
   if (name === 'favourites') favoritesSeenCount = favorites.size;
   if (name === 'admin') renderAdminPanel();
+  if (name === 'profile') applyVaultAdminAccess();
   document.getElementById('adminFabBar')?.toggleAttribute('hidden', name !== 'admin');
   updateNavBadges();
   content.scrollTop = 0;

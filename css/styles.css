@@ -3101,6 +3101,7 @@ body.plans-view .content {
   font-weight: 600;
   color: var(--text-dim);
   margin-bottom: 6px;
+  text-align: center;
 }
 .admin-pass-input {
   width: 100%;
