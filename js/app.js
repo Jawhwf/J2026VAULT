@@ -782,6 +782,8 @@ function configuredVaultOwnerUsernames() {
 }
 
 function isVaultOwnerDevOverride() {
+  // Dev override is local-only — never honor it on GitHub Pages / public hosts
+  if (!isLocalDevHost()) return false;
   try {
     if (new URLSearchParams(window.location.search).get('vault_owner') === '1') return true;
     return sessionStorage.getItem('j2026vault_owner_dev') === '1';
@@ -791,6 +793,10 @@ function isVaultOwnerDevOverride() {
 }
 
 function persistVaultOwnerDevOverride() {
+  if (!isLocalDevHost()) {
+    try { sessionStorage.removeItem('j2026vault_owner_dev'); } catch {}
+    return;
+  }
   try {
     if (new URLSearchParams(window.location.search).get('vault_owner') === '1') {
       sessionStorage.setItem('j2026vault_owner_dev', '1');
@@ -864,7 +870,9 @@ function isInsideTelegramMiniApp() {
 
 function isLocalDevHost() {
   const host = (window.location.hostname || '').toLowerCase();
-  return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '';
+  const protocol = (window.location.protocol || '').toLowerCase();
+  if (protocol === 'file:') return true;
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
 }
 
 function isTelegramGateBypassed() {
@@ -882,23 +890,37 @@ function shouldShowTelegramGate() {
 function showTelegramGate() {
   const gate = document.getElementById('telegramGate');
   const openBtn = document.getElementById('telegramGateOpenBtn');
+  const splash = document.getElementById('splash');
   if (openBtn) openBtn.href = TELEGRAM_BOT_LINK;
+  document.documentElement.classList.remove('tg-session-ok');
   if (gate) {
     gate.hidden = false;
+    gate.removeAttribute('hidden');
     gate.setAttribute('aria-hidden', 'false');
   }
+  if (splash) splash.hidden = true;
   document.body.classList.add('tg-gate-active');
   document.body.classList.remove('splash-active');
-  document.getElementById('splash')?.remove();
 }
 
 function hideTelegramGate() {
   const gate = document.getElementById('telegramGate');
   if (gate) {
     gate.hidden = true;
+    gate.setAttribute('hidden', '');
     gate.setAttribute('aria-hidden', 'true');
   }
+  document.documentElement.classList.add('tg-session-ok');
   document.body.classList.remove('tg-gate-active');
+}
+
+function beginSplash() {
+  const splash = document.getElementById('splash');
+  if (splash) {
+    splash.hidden = false;
+    splash.removeAttribute('hidden');
+  }
+  document.body.classList.add('splash-active');
 }
 
 function syncProfileFromTelegram(user) {
@@ -5089,6 +5111,17 @@ function initApp() {
 }
 
 async function runSplash() {
+  // Gate first — never boot the vault UI on a public browser URL
+  persistVaultOwnerDevOverride();
+  initTelegramUser();
+  if (shouldShowTelegramGate()) {
+    showTelegramGate();
+    return;
+  }
+
+  hideTelegramGate();
+  beginSplash();
+
   const splash = document.getElementById('splash');
   const statusEl = document.getElementById('splashStatus');
   const tipEl = document.getElementById('splashTip');
@@ -5131,6 +5164,7 @@ async function runSplash() {
   if (!ready) {
     clearTimeout(slowTimer);
     if (tipTimer) clearInterval(tipTimer);
+    showTelegramGate();
     return;
   }
 

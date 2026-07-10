@@ -7,12 +7,45 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/styles.css?v=20260710b">
   <link rel="icon" href="assets/pfp.png" type="image/png">
   <link rel="preload" href="assets/j26-logo.svg" as="image" type="image/svg+xml">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    /* Fail closed: public URL stays gated until a real Telegram Mini App session is proven. */
+    (function () {
+      var host = (location.hostname || '').toLowerCase();
+      var protocol = (location.protocol || '').toLowerCase();
+      var local = protocol === 'file:' || host === 'localhost' || host === '127.0.0.1' || host === '::1';
+      var bypass = false;
+      if (local) {
+        try {
+          bypass = new URLSearchParams(location.search).get('vault_owner') === '1'
+            || sessionStorage.getItem('j2026vault_owner_dev') === '1';
+        } catch (e) {}
+      } else {
+        try { sessionStorage.removeItem('j2026vault_owner_dev'); } catch (e) {}
+      }
+      var tg = window.Telegram && window.Telegram.WebApp;
+      var inside = !!(tg && tg.initData && String(tg.initData).trim()
+        && tg.initDataUnsafe && tg.initDataUnsafe.user
+        && (tg.initDataUnsafe.user.id || tg.initDataUnsafe.user.username));
+      if (bypass || inside) {
+        document.documentElement.classList.add('tg-session-ok');
+      }
+    })();
+  </script>
+  <style>
+    /* Before app.js runs: show gate unless a Telegram session was detected above */
+    html:not(.tg-session-ok) body { overflow: hidden; }
+    html:not(.tg-session-ok) #splash,
+    html:not(.tg-session-ok) #backdrop { visibility: hidden !important; pointer-events: none !important; }
+    html:not(.tg-session-ok) #telegramGate { display: flex !important; }
+    html.tg-session-ok #telegramGate { display: none !important; }
+  </style>
 </head>
-<body class="splash-active">
-  <div class="splash" id="splash" role="status" aria-live="polite" aria-label="Loading">
+<body class="tg-gate-active">
+  <div class="splash" id="splash" role="status" aria-live="polite" aria-label="Loading" hidden>
     <div class="splash-rays" aria-hidden="true"></div>
     <div class="splash-glow" aria-hidden="true"></div>
     <div class="splash-vignette" aria-hidden="true"></div>
@@ -25,7 +58,7 @@
     </div>
   </div>
 
-  <div class="tg-gate" id="telegramGate" hidden aria-hidden="true">
+  <div class="tg-gate" id="telegramGate" aria-hidden="false">
     <div class="tg-gate-glow" aria-hidden="true"></div>
     <div class="tg-gate-card" role="dialog" aria-labelledby="telegramGateTitle" aria-describedby="telegramGateDesc">
       <div class="tg-gate-top">
@@ -959,9 +992,8 @@
     </div>
   </div>
 
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="js/bundle-tgs-data.js"></script>
-  <script src="js/app.js"></script>
+  <script src="js/bundle-tgs-data.js?v=20260710b"></script>
+  <script src="js/app.js?v=20260710b"></script>
 </body>
 </html>
