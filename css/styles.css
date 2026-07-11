@@ -171,7 +171,9 @@ html, body {
 .carousel-track { display: flex; transition: transform 0.55s var(--ease); }
 .carousel-slide { min-width: 100%; }
 .hero-card {
-  height: clamp(160px, 26vw, 260px);
+  aspect-ratio: 16 / 10;
+  height: auto;
+  min-height: 0;
   border-radius: var(--radius-lg);
   display: flex;
   align-items: flex-end;
@@ -179,17 +181,42 @@ html, body {
   position: relative;
   overflow: hidden;
   border: 1px solid var(--border-soft);
+  background-color: var(--surface-2);
 }
 .hero-card::after {
   content: '';
   position: absolute; inset: 0;
   background: linear-gradient(to top, rgba(8,8,11,0.85) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 1;
 }
-.hero-label { position: relative; z-index: 1; font-size: clamp(16px, 2.4vw, 22px); font-weight: 700; }
+.hero-card.has-cover-image {
+  background-image: none;
+  padding: 0;
+}
+.hero-card.has-cover-image::after {
+  display: none;
+}
+.hero-card.has-cover-image .hero-label {
+  display: none;
+}
+.hero-label { position: relative; z-index: 2; font-size: clamp(16px, 2.4vw, 22px); font-weight: 700; }
 .hero-1 { background: linear-gradient(135deg, #16131f, #2b2140 60%, #101017); }
 .hero-2 { background: linear-gradient(135deg, #131321, #241f3a 60%, #0e0e15); }
 .hero-3 { background: linear-gradient(135deg, #141220, #322554 60%, #101017); }
 .hero-4 { background: linear-gradient(135deg, #16131f, #201b34 60%, #0d0d14); }
+.hero-card .hero-cover-img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  display: block;
+  z-index: 0;
+}
+.hero-card.is-clickable { cursor: pointer; }
+.hero-card.is-clickable:hover { filter: brightness(1.05); }
 
 .carousel-dots { display: flex; justify-content: center; gap: 6px; margin-top: 14px; }
 .carousel-dot {
@@ -289,6 +316,39 @@ html, body {
 }
 .chip-icon { padding: 9px 12px; display: flex; align-items: center; }
 
+.catalog-toolbar {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 6px;
+  width: 100%;
+}
+#view-catalog .catalog-toolbar .chip-row {
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: visible;
+}
+#view-catalog .catalog-toolbar .chip {
+  padding: 7px 12px;
+  font-size: 12px;
+}
+#view-catalog .catalog-toolbar .chip-icon {
+  padding: 7px 10px;
+}
+#view-catalog .catalog-toolbar .chip-tier-icon {
+  margin-right: 5px;
+}
+#view-catalog .catalog-toolbar .chip-row--sort {
+  justify-content: center;
+}
+
 .item-count { font-size: 12px; color: var(--text-dim); margin: 10px 0 16px; letter-spacing: 0.02em; }
 
 /* Tab views: centered headers & counts (matches Catalog) */
@@ -305,7 +365,7 @@ html, body {
 #view-purchases .item-count,
 #view-admin .item-count { text-align: center; }
 
-#view-catalog .chip-row { justify-content: center; }
+#view-catalog .item-count { margin: 6px 0 12px; }
 
 .badge-plan {
   gap: 5px;
@@ -2249,8 +2309,8 @@ body.product-view .sticky-buy { display: flex; }
 body.hide-nav .bottom-nav { display: none; }
 body.hide-nav .content { padding-bottom: 100px; }
 body.plans-view .content {
-  padding-top: clamp(14px, 3vw, 22px);
-  padding-bottom: var(--pad);
+  padding-top: clamp(10px, 2.5vw, 16px);
+  padding-bottom: 14px;
 }
 
 /* ── Subscription plans ── */
@@ -2276,51 +2336,56 @@ body.plans-view .content {
 .plans-head {
   position: relative;
   justify-content: center;
-  margin-bottom: 18px;
+  margin-bottom: 12px;
   flex-shrink: 0;
 }
 .plans-head .head-back { position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 38px; height: 38px; }
 .plans-head .head-back:hover { transform: translateY(-50%) translateX(-2px); }
-.plans-head .anim-title { font-size: clamp(20px, 4vw, 26px); text-align: center; }
+.plans-head .anim-title { font-size: clamp(19px, 3.8vw, 25px); text-align: center; }
 
 .plans-layout {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  justify-content: space-between;
 }
 
 .plans-section {
   display: flex;
   flex-direction: column;
-  flex-shrink: 0;
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .plans-section-upgrade {
   display: flex;
   flex-direction: column;
+  flex: 2 1 0;
+  min-height: 0;
 }
 .plans-section-label {
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-dim);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   text-align: center;
+  flex-shrink: 0;
 }
 
 .plan-icon-wrap {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 11px;
+  border-radius: 10px;
   background: var(--surface-3);
   border: 1px solid var(--border);
   overflow: hidden;
@@ -2339,8 +2404,8 @@ body.plans-view .content {
   box-shadow: 0 0 12px -4px rgba(255, 255, 255, 0.15);
 }
 .plan-crown {
-  width: 26px;
-  height: 26px;
+  width: 25px;
+  height: 25px;
   object-fit: contain;
   object-position: center center;
   display: block;
@@ -2358,11 +2423,11 @@ body.plans-view .content {
 .plan-feats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-  margin-top: 12px;
+  gap: 5px;
+  margin-top: 10px;
 }
 .plan-feat {
-  padding: 6px 4px;
+  padding: 5px 4px;
   border-radius: 8px;
   background: rgba(255,255,255,0.03);
   border: 1px solid var(--border);
@@ -2377,25 +2442,28 @@ body.plans-view .content {
 
 /* Shared plan card */
 .plan-card {
-  padding: 14px 16px;
+  padding: 12px 14px;
   border-radius: var(--radius-lg);
   background: var(--surface-2);
   border: 1px solid var(--border);
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
   min-height: 0;
+  justify-content: space-between;
 }
 
 .plan-blurb {
-  margin-top: 12px;
-  margin-bottom: 4px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  margin-top: 10px;
+  margin-bottom: 2px;
+  padding: 9px 11px;
+  border-radius: 9px;
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);
   font-size: 11px;
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--text-muted);
+  flex: 1 1 auto;
 }
 
 .plan-blurb[hidden] { display: none; }
@@ -2424,6 +2492,8 @@ body.plans-view .content {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .plan-card-lurker {
@@ -2445,7 +2515,8 @@ body.plans-view .content {
 .plan-card-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 .plan-card-title { flex: 1; min-width: 0; }
 .plan-row-name {
@@ -2461,12 +2532,12 @@ body.plans-view .content {
 .plan-row-period {
   font-size: 12px;
   color: var(--text-muted);
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .plan-status-pill {
   flex-shrink: 0;
-  padding: 5px 12px;
+  padding: 5px 11px;
   border-radius: 999px;
   font-size: 11px;
   font-weight: 700;
@@ -2489,20 +2560,20 @@ body.plans-view .content {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   margin-top: 10px;
-  padding-top: 12px;
+  padding-top: 10px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
 .plan-price-block {
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
 }
 .price-accent {
-  font-size: 18px;
+  font-size: 17px;
   font-weight: 900;
   color: #fff;
   letter-spacing: -0.02em;
@@ -2516,7 +2587,7 @@ body.plans-view .content {
 
 .btn-getplan {
   flex-shrink: 0;
-  padding: 8px 18px;
+  padding: 8px 16px;
   border-radius: 999px;
   border: none;
   background: var(--accent);
@@ -6205,6 +6276,16 @@ body.plans-view .content {
   transform: scale(1.42);
   transform-origin: center center;
 }
+.pay-method-icon--zelle {
+  overflow: hidden;
+  background: #000;
+}
+.pay-method-icon--zelle img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transform: scale(1.08);
+}
 .pay-method.is-selected .pay-method-icon {
   background: var(--surface-3);
   box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.35);
@@ -6240,6 +6321,159 @@ body.plans-view .content {
   transition: filter 0.2s, box-shadow 0.25s;
 }
 .btn-create-payment:hover { filter: brightness(1.08); box-shadow: 0 12px 34px -14px var(--accent-glow); }
+
+/* ── Cash App QR modal ── */
+.cashapp-qr-overlay {
+  position: absolute; inset: 0; z-index: 140;
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--pad);
+  background: rgba(6, 6, 9, 0.72);
+  backdrop-filter: blur(10px);
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.28s var(--ease);
+}
+.cashapp-qr-overlay.open { opacity: 1; pointer-events: auto; }
+.cashapp-qr-sheet {
+  position: relative;
+  width: min(100%, 360px);
+  background: var(--surface);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-xl);
+  padding: 28px 22px 22px;
+  text-align: center;
+  box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.75);
+  transform: translateY(14px) scale(0.98);
+  transition: transform 0.32s var(--ease);
+}
+.cashapp-qr-overlay.open .cashapp-qr-sheet {
+  transform: translateY(0) scale(1);
+}
+.cashapp-qr-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 34px; height: 34px; border-radius: 50%;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted);
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+.cashapp-qr-close:hover { color: var(--text); border-color: var(--accent-line); }
+.cashapp-qr-brand { margin-bottom: 18px; }
+.cashapp-qr-brand-icon {
+  width: 42px; height: 42px; object-fit: contain;
+  border-radius: 12px; margin: 0 auto 10px; display: block;
+}
+.cashapp-qr-eyebrow {
+  margin: 0 0 4px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.12em;
+  text-transform: uppercase; color: #00d632;
+}
+.cashapp-qr-eyebrow.is-paypal { color: #0070ba; }
+.cashapp-qr-eyebrow.is-zelle { color: #6d1ed4; }
+.cashapp-qr-eyebrow.is-bitcoin { color: #f7931a; }
+.cashapp-qr-title {
+  margin: 0 0 6px;
+  font-size: 22px; font-weight: 800; color: var(--text);
+}
+.cashapp-qr-sub {
+  margin: 0;
+  font-size: 13px; line-height: 1.45; color: var(--text-muted);
+}
+.cashapp-qr-frame {
+  margin: 0 auto 14px;
+  width: min(100%, 240px);
+  padding: 12px;
+  border-radius: 18px;
+  background: #000;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+.cashapp-qr-frame.is-paypal {
+  background: #fff;
+  border-color: rgba(0, 112, 186, 0.18);
+}
+.cashapp-qr-frame.is-zelle {
+  background: #fff;
+  border-color: rgba(109, 30, 212, 0.22);
+}
+.cashapp-qr-frame.is-bitcoin {
+  background: #fff;
+  border-color: rgba(247, 147, 26, 0.28);
+}
+.scan-pay-address {
+  display: none;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  text-align: center;
+}
+.scan-pay-address.is-visible {
+  display: block;
+}
+.scan-pay-address-text {
+  display: block;
+  width: 100%;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text);
+  white-space: nowrap;
+  overflow-x: auto;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  scrollbar-width: none;
+}
+.scan-pay-address-text::-webkit-scrollbar { display: none; }
+.scan-pay-copy-btn {
+  display: none;
+  margin-bottom: 10px;
+}
+.scan-pay-copy-btn.is-visible {
+  display: block;
+}
+.scan-pay-stripe-btn {
+  display: none;
+  margin-bottom: 10px;
+}
+.scan-pay-stripe-btn.is-visible {
+  display: block;
+}
+.cashapp-qr-eyebrow.is-card { color: #a78bfa; }
+.stripe-finish-mark {
+  width: 52px;
+  height: 52px;
+  margin: 0 auto 12px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: linear-gradient(145deg, rgba(167, 139, 250, 0.95), rgba(124, 58, 237, 0.9));
+  box-shadow: 0 10px 28px -12px rgba(167, 139, 250, 0.75);
+}
+.stripe-finish-sheet .cashapp-qr-sub {
+  max-width: 28ch;
+  margin-left: auto;
+  margin-right: auto;
+}
+.cashapp-qr-code {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.cashapp-qr-plan {
+  margin: 0 0 6px;
+  font-size: 14px; font-weight: 700; color: var(--text);
+}
+.cashapp-qr-hint {
+  margin: 0 0 16px;
+  font-size: 12px; line-height: 1.45; color: var(--text-muted);
+}
+.btn-cashapp-done {
+  width: 100%; padding: 14px; border: none; border-radius: 999px;
+  background: var(--accent); color: #fff;
+  font-size: 15px; font-weight: 800; font-family: var(--font); cursor: pointer;
+  transition: filter 0.2s, box-shadow 0.25s;
+}
+.btn-cashapp-done:hover { filter: brightness(1.08); box-shadow: 0 12px 34px -14px var(--accent-glow); }
 
 /* ── Purchase / download celebration ── */
 .celebrate-overlay {
