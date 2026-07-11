@@ -7,20 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20260710d">
+  <link rel="stylesheet" href="css/styles.css?v=20260711f">
   <link rel="icon" href="assets/pfp.png" type="image/png">
   <link rel="preload" href="assets/j26-logo.svg" as="image" type="image/svg+xml">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
-    /* Fail closed on public hosts. TEMP: local/file always unlocked for editing. */
+    /* Fail closed everywhere: only a real Telegram Mini App session unlocks the UI. */
     (function () {
-      var host = (location.hostname || '').toLowerCase();
-      var protocol = (location.protocol || '').toLowerCase();
-      var local = protocol === 'file:' || host === 'localhost' || host === '127.0.0.1' || host === '::1';
-      if (local) {
-        document.documentElement.classList.add('tg-session-ok');
-        return;
-      }
       try { sessionStorage.removeItem('j2026vault_owner_dev'); } catch (e) {}
       var tg = window.Telegram && window.Telegram.WebApp;
       var inside = !!(tg && tg.initData && String(tg.initData).trim()
@@ -99,28 +92,7 @@
 
           <div class="carousel-wrap">
             <div class="carousel" id="carousel">
-              <div class="carousel-track" id="carouselTrack">
-                <div class="carousel-slide">
-                  <div class="hero-card hero-1">
-                    <span class="hero-label">Featured Example 01</span>
-                  </div>
-                </div>
-                <div class="carousel-slide">
-                  <div class="hero-card hero-2">
-                    <span class="hero-label">Featured Example 02</span>
-                  </div>
-                </div>
-                <div class="carousel-slide">
-                  <div class="hero-card hero-3">
-                    <span class="hero-label">Featured Example 03</span>
-                  </div>
-                </div>
-                <div class="carousel-slide">
-                  <div class="hero-card hero-4">
-                    <span class="hero-label">Featured Example 04</span>
-                  </div>
-                </div>
-              </div>
+              <div class="carousel-track" id="carouselTrack"></div>
             </div>
             <div class="carousel-dots" id="carouselDots"></div>
           </div>
@@ -129,20 +101,22 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
             <input type="search" placeholder="Search files…" id="searchInput">
           </div>
-          <div class="chip-row" id="filterChips">
-            <button class="chip active" data-filter="all">All</button>
-            <button class="chip chip-tier-lurker" data-filter="free"><img class="chip-tier-icon chip-tier-icon--lurker" src="assets/crown-lurker.gif" alt="">Lurker</button>
-            <button class="chip chip-tier-leaker" data-filter="premium"><img class="chip-tier-icon chip-tier-icon--leaker" src="assets/crown-leaker.gif" alt="">Leaker</button>
-            <button class="chip chip-tier-bundle" data-filter="bundle"><span class="bundle-lottie chip-tier-icon chip-tier-icon--bundle" data-tgs="assets/bundle-icon/AnimatedSticker.tgs" aria-hidden="true"></span>Bundle</button>
-            <button class="chip chip-tier-heavenly" data-filter="exclusive"><img class="chip-tier-icon chip-tier-icon--heavenly" src="assets/crown-heavenly.gif" alt="">HEAVENLY</button>
-          </div>
-          <div class="chip-row" id="sortChips">
-            <button class="chip chip-icon" aria-label="Sort direction">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M10 18h4"/></svg>
-            </button>
-            <button class="chip active" data-sort="date">By date</button>
-            <button class="chip" data-sort="downloads">By downloads</button>
-            <button class="chip" data-sort="favourites">By favourites</button>
+          <div class="catalog-toolbar">
+            <div class="chip-row chip-row--filters" id="filterChips">
+              <button class="chip active" data-filter="all">All</button>
+              <button class="chip chip-tier-lurker" data-filter="free"><img class="chip-tier-icon chip-tier-icon--lurker" src="assets/crown-lurker.gif" alt="">Lurker</button>
+              <button class="chip chip-tier-leaker" data-filter="premium"><img class="chip-tier-icon chip-tier-icon--leaker" src="assets/crown-leaker.gif" alt="">Leaker</button>
+              <button class="chip chip-tier-bundle" data-filter="bundle"><span class="bundle-lottie chip-tier-icon chip-tier-icon--bundle" data-tgs="assets/bundle-icon/AnimatedSticker.tgs" aria-hidden="true"></span>Bundle</button>
+              <button class="chip chip-tier-heavenly" data-filter="exclusive"><img class="chip-tier-icon chip-tier-icon--heavenly" src="assets/crown-heavenly.gif" alt="">HEAVENLY</button>
+            </div>
+            <div class="chip-row chip-row--sort" id="sortChips">
+              <button class="chip chip-icon" aria-label="Sort direction">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M7 12h10M10 18h4"/></svg>
+              </button>
+              <button class="chip active" data-sort="date">Date</button>
+              <button class="chip" data-sort="downloads">Downloads</button>
+              <button class="chip" data-sort="favourites">Favourites</button>
+            </div>
           </div>
 
           <p class="item-count" id="itemCount">20 of 47 items</p>
@@ -261,7 +235,7 @@
                 </div>
                 <div class="mini-stat">
                   <span class="mini-stat-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5z"/></svg></span>
-                  <div><span class="mini-label">Credits</span><span class="mini-val" id="premiumCredits">0</span></div>
+                  <div><span class="mini-label">Access</span><span class="mini-val" id="premiumCredits">Free</span></div>
                 </div>
                 <div class="mini-stat">
                   <span class="mini-stat-icon" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
@@ -795,7 +769,7 @@
                   </div>
                 </article>
 
-                <article class="plan-card" data-plan="ACOLYTE" data-price="9.99">
+                <article class="plan-card" data-plan="ACOLYTE" data-price="5">
                   <div class="plan-card-head">
                     <div class="plan-icon-wrap">
                       <img class="plan-crown plan-crown--leaker" src="assets/crown-leaker.gif" alt="">
@@ -806,21 +780,21 @@
                     </div>
                   </div>
                   <div class="plan-feats">
-                    <span class="plan-feat">2 premium</span>
-                    <span class="plan-feat">5 / day</span>
-                    <span class="plan-feat">8% referral</span>
+                    <span class="plan-feat">FREE / Lurker items</span>
+                    <span class="plan-feat">Premium access</span>
+                    <span class="plan-feat">Monthly plan</span>
                   </div>
-                  <p class="plan-blurb">Unlock premium &amp; exclusive drops with monthly credits. Renews every 30 days — cancel anytime.</p>
+                  <p class="plan-blurb">One-month access to FREE / Lurker-labeled items plus selected premium assets. Renews every 30 days — DM staff or owner to cancel.</p>
                   <div class="plan-card-foot">
                     <div class="plan-price-block">
-                      <span class="price-accent">$9.99</span>
+                      <span class="price-accent">$5</span>
                       <span class="price-period">/ month</span>
                     </div>
-                    <button class="btn-getplan" data-plan="ACOLYTE" data-price="9.99">Get Plan</button>
+                    <button class="btn-getplan" data-plan="ACOLYTE" data-price="5">Get Plan</button>
                   </div>
                 </article>
 
-                <article class="plan-card" data-plan="ETERNAL" data-price="199.99">
+                <article class="plan-card" data-plan="ETERNAL" data-price="100">
                   <div class="plan-card-head">
                     <div class="plan-icon-wrap">
                       <img class="plan-crown plan-crown--heavenly" src="assets/crown-heavenly.gif" alt="">
@@ -831,17 +805,17 @@
                     </div>
                   </div>
                   <div class="plan-feats">
-                    <span class="plan-feat">6 premium</span>
-                    <span class="plan-feat">Unlimited</span>
-                    <span class="plan-feat">20% referral</span>
+                    <span class="plan-feat">Lifetime access</span>
+                    <span class="plan-feat">All premium</span>
+                    <span class="plan-feat">One-time pay</span>
                   </div>
-                  <p class="plan-blurb">One payment, lifetime access. Unlimited credits, every premium item — yours forever.</p>
+                  <p class="plan-blurb">One-time payment for lifetime vault access. Every premium item is yours — no renewals.</p>
                   <div class="plan-card-foot">
                     <div class="plan-price-block">
-                      <span class="price-accent">$199.99</span>
+                      <span class="price-accent">$100</span>
                       <span class="price-period">one-time</span>
                     </div>
-                    <button class="btn-getplan" data-plan="ETERNAL" data-price="199.99">Get Plan</button>
+                    <button class="btn-getplan" data-plan="ETERNAL" data-price="100">Get Plan</button>
                   </div>
                 </article>
               </div>
@@ -926,12 +900,12 @@
             <div class="pay-summary-body">
               <span class="pay-summary-label">SUBSCRIPTION</span>
               <span class="pay-summary-plan" id="paySummaryPlan">GOLD</span>
-              <span class="pay-summary-price">Plan price: <strong id="paySummaryPrice">$9.99</strong></span>
+              <span class="pay-summary-price">Plan price: <strong id="paySummaryPrice">$5</strong></span>
             </div>
           </div>
 
           <div class="pay-methods" id="payMethods">
-            <button class="pay-method is-selected" data-method="mastercard" aria-label="Mastercard">
+            <button class="pay-method" data-method="mastercard" aria-label="Mastercard">
               <span class="pay-method-icon"><img src="assets/payment-icons/mastercard.gif" alt="" loading="lazy"></span>
               <span class="pay-method-label">Mastercard</span>
             </button>
@@ -947,17 +921,63 @@
               <span class="pay-method-icon"><img src="assets/payment-icons/paypal.gif" alt="" loading="lazy"></span>
               <span class="pay-method-label">PayPal</span>
             </button>
-            <button class="pay-method" data-method="cashapp" aria-label="Cash App">
+            <button class="pay-method is-selected" data-method="cashapp" aria-label="Cash App">
               <span class="pay-method-icon pay-method-icon--cashapp"><img src="assets/payment-icons/cashapp.gif" alt="" loading="lazy"></span>
               <span class="pay-method-label">Cash App</span>
             </button>
-            <button class="pay-method" data-method="doordash" aria-label="DoorDash">
-              <span class="pay-method-icon"><img src="assets/payment-icons/doordash.gif" alt="" loading="lazy"></span>
-              <span class="pay-method-label">DoorDash</span>
+            <button class="pay-method" data-method="zelle" aria-label="Zelle">
+              <span class="pay-method-icon pay-method-icon--zelle"><img src="assets/payment-icons/zelle.gif" alt="" loading="lazy"></span>
+              <span class="pay-method-label">Zelle</span>
             </button>
           </div>
 
           <button class="btn-create-payment" id="createPaymentBtn">Create payment</button>
+        </div>
+      </div>
+
+      <!-- Scan-to-pay QR (Cash App / PayPal) -->
+      <div class="cashapp-qr-overlay" id="scanPayQrModal" aria-hidden="true">
+        <div class="cashapp-qr-sheet" role="dialog" aria-modal="true" aria-labelledby="scanPayQrTitle">
+          <button class="cashapp-qr-close" id="scanPayQrClose" type="button" aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <div class="cashapp-qr-brand">
+            <img class="cashapp-qr-brand-icon" id="scanPayQrBrandIcon" src="assets/payment-icons/cashapp.gif" alt="">
+            <p class="cashapp-qr-eyebrow" id="scanPayQrEyebrow">Cash App</p>
+            <h2 class="cashapp-qr-title" id="scanPayQrTitle">Scan to pay</h2>
+            <p class="cashapp-qr-sub" id="scanPayQrSub">Open Cash App and scan this code to complete your payment.</p>
+          </div>
+          <div class="cashapp-qr-frame" id="scanPayQrFrame">
+            <img class="cashapp-qr-code" id="scanPayQrCode" src="assets/payment-icons/cashapp-qr.svg" alt="Payment QR code" width="288" height="288">
+          </div>
+          <p class="cashapp-qr-plan" id="scanPayQrPlan"></p>
+          <div class="scan-pay-address" id="scanPayAddressRow" hidden>
+            <code class="scan-pay-address-text" id="scanPayAddressText"></code>
+          </div>
+          <p class="cashapp-qr-hint">After paying, DM staff and the owner with a screenshot of proof.</p>
+          <button class="btn-cashapp-done scan-pay-copy-btn" id="scanPayAddressCopy" type="button" hidden>Copy address</button>
+          <button class="btn-cashapp-done scan-pay-stripe-btn" id="scanPayStripeBtn" type="button" hidden>Continue to Stripe</button>
+          <button class="btn-cashapp-done" id="scanPayQrDone" type="button">Done</button>
+        </div>
+      </div>
+
+      <!-- Stripe checkout follow-up -->
+      <div class="cashapp-qr-overlay" id="stripeFinishModal" aria-hidden="true">
+        <div class="cashapp-qr-sheet stripe-finish-sheet" role="dialog" aria-modal="true" aria-labelledby="stripeFinishTitle">
+          <button class="cashapp-qr-close" id="stripeFinishClose" type="button" aria-label="Close">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <div class="cashapp-qr-brand">
+            <div class="stripe-finish-mark" aria-hidden="true">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>
+            </div>
+            <p class="cashapp-qr-eyebrow is-card">Checkout opened</p>
+            <h2 class="cashapp-qr-title" id="stripeFinishTitle">Finish?</h2>
+            <p class="cashapp-qr-sub">Make sure to contact the owner and staff after paying to show a screenshot of proof.</p>
+          </div>
+          <p class="cashapp-qr-plan" id="stripeFinishPlan"></p>
+          <p class="cashapp-qr-hint">Your plan unlocks after staff confirms your payment screenshot.</p>
+          <button class="btn-cashapp-done" id="stripeFinishDone" type="button">Got it</button>
         </div>
       </div>
 
@@ -987,7 +1007,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="js/bundle-tgs-data.js?v=20260710d"></script>
-  <script src="js/app.js?v=20260710d"></script>
+  <script src="js/bundle-tgs-data.js?v=20260711f"></script>
+  <script src="js/app.js?v=20260711f"></script>
 </body>
 </html>

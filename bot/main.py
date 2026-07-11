@@ -9,6 +9,8 @@ Run:
 """
 
 import sys
+import threading
+from io import BytesIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -30,46 +32,17 @@ IMG_PREMIUM = ASSETS_DIR / "membership.png"
 IMG_HELP = ASSETS_DIR / "help.png"
 IMG_MENU = ASSETS_DIR / "menu.png"
 
-bot = TeleBot(API_TOKEN, parse_mode="HTML")
+# threaded=False avoids overlapping navigates fighting over the same panel
+bot = TeleBot(API_TOKEN, parse_mode="HTML", threaded=False)
 
+# chat_id -> {"current": screen_key|None, "stack": [...], "message_id": int|None}
+_nav = {}
+_nav_lock = threading.Lock()
 
-def main_menu():
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        types.InlineKeyboardButton(
-            "Join Telegram Community",
-            url=TELEGRAM_COMMUNITY,
-        )
-    )
-    markup.add(
-        types.InlineKeyboardButton(
-            "Join Discord",
-            url=DISCORD_INVITE,
-        )
-    )
-    return markup
-
-
-def send_banner(chat_id, image_path, caption, reply_markup=None):
-    """Send a local PNG with caption + buttons. Falls back if caption is too long."""
-    caption = (caption or "").strip()
-    if not image_path.exists():
-        bot.send_message(chat_id, caption or "Image missing.", reply_markup=reply_markup)
-        return
-
-    with open(image_path, "rb") as photo:
-        if len(caption) <= 1024:
-            bot.send_photo(
-                chat_id,
-                photo,
-                caption=caption,
-                reply_markup=reply_markup,
-                parse_mode="HTML",
-            )
-            return
-        bot.send_photo(chat_id, photo)
-
-    bot.send_message(chat_id, caption, reply_markup=reply_markup)
+_IMAGE_BYTES = {}
+for _path in (IMG_WELCOME, IMG_PREMIUM, IMG_HELP, IMG_MENU):
+    if _path.exists():
+        _IMAGE_BYTES[_path] = _path.read_bytes()
 
 
 MEMBERSHIP_TEXT = """
@@ -116,10 +89,8 @@ Private members-only vault — real members only.
 """.strip()
 
 
-@bot.message_handler(commands=["start"])
-def start(message):
-    first_name = message.from_user.first_name or "there"
-    text = f"""
+def welcome_text(first_name):
+    return f"""
 <b>👋 Welcome, {first_name}!</b>
 
 Welcome to <b>J2026Vault</b> — the official gateway to the vault Mini App and membership archive.
@@ -129,17 +100,9 @@ Tap the <b>App</b> button at the bottom left to launch the vault, or join the co
 Send /membership for plans & payment info.
 Send /help for commands.
 """.strip()
-    send_banner(message.chat.id, IMG_WELCOME, text, reply_markup=main_menu())
 
 
-@bot.message_handler(commands=["membership", "pricing", "buy"])
-def membership(message):
-    send_banner(message.chat.id, IMG_PREMIUM, MEMBERSHIP_TEXT, reply_markup=main_menu())
-
-
-@bot.message_handler(commands=["help"])
-def help_command(message):
-    text = """
+HELP_TEXT = """
 <b>📖 Help</b>
 
 • /start — welcome screen
@@ -149,18 +112,11 @@ def help_command(message):
 <b>Open the vault</b>
 Use the <b>App</b> button at the bottom left.
 
-<b>Community</b>
-💬 Telegram community
-🎮 Discord
-
 Questions? DM staff or owner.
 """.strip()
-    send_banner(message.chat.id, IMG_HELP, text, reply_markup=main_menu())
 
 
-@bot.message_handler(func=lambda message: True)
-def default_reply(message):
-    text = """
+MENU_TEXT = """
 <b>🤖 J2026Vault Bot</b>
 
 Use:
@@ -170,7 +126,192 @@ Use:
 
 Open the vault with the <b>App</b> button at the bottom left.
 """.strip()
-    send_banner(message.chat.id, IMG_MENU, text, reply_markup=main_menu())
+
+
+def screen_content(screen, first_name="there"):
+    if screen == "start":
+        return IMG_WELCOME, welcome_text(first_name)
+    if screen == "membership":
+        return IMG_PREMIUM, MEMBERSHIP_TEXT
+    if screen == "help":
+        return IMG_HELP, HELP_TEXT
+    return IMG_MENU, MENU_TEXT
+
+
+def photo_file(image_path):
+    data = _IMAGE_BYTES.get(image_path)
+    if data is None:
+        if not image_path.exists():
+            return None
+        data = image_path.read_bytes()
+        _IMAGE_BYTES[image_path] = data
+    buf = BytesIO(data)
+    buf.name = image_path.name
+    return buf
+
+
+def main_menu(show_back=False):
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    markup.add(
+        types.InlineKeyboardButton(
+            "Join Telegram Community",
+            url=TELEGRAM_COMMUNITY,
+        )
+    )
+    markup.add(
+        types.InlineKeyboardButton(
+            "Join Discord",
+            url=DISCORD_INVITE,
+        )
+    )
+    if show_back:
+        markup.add(
+            types.InlineKeyboardButton(
+                "🔙 Back",
+                callback_data="nav:back",
+            )
+        )
+    return markup
+
+
+def delete_message_safe(chat_id, message_id):
+    if not chat_id or not message_id:
+        return
+    try:
+        bot.delete_message(chat_id, message_id)
+    except Exception:
+        pass
+
+
+def send_banner(chat_id, image_path, caption, reply_markup=None):
+    caption = (caption or "").strip()
+    photo = photo_file(image_path)
+    if photo is None:
+        msg = bot.send_message(chat_id, caption or "Image missing.", reply_markup=reply_markup)
+        return getattr(msg, "message_id", None)
+
+    msg = bot.send_photo(
+        chat_id,
+        photo,
+        caption=caption[:1024],
+        reply_markup=reply_markup,
+        parse_mode="HTML",
+    )
+    return getattr(msg, "message_id", None)
+
+
+def edit_banner(chat_id, message_id, image_path, caption, reply_markup=None):
+    """Update the existing panel in place. Never deletes."""
+    caption = (caption or "").strip()[:1024]
+    photo = photo_file(image_path)
+    if photo is None or not message_id:
+        return False
+    try:
+        media = types.InputMediaPhoto(media=photo, caption=caption, parse_mode="HTML")
+        bot.edit_message_media(
+            media=media,
+            chat_id=chat_id,
+            message_id=message_id,
+            reply_markup=reply_markup,
+        )
+        return True
+    except Exception as err:
+        err_text = str(err).lower()
+        # Same screen tapped again — treat as success, do not delete/resend
+        if "message is not modified" in err_text or "exactly the same" in err_text:
+            return True
+        print(f"edit_banner failed ({chat_id}/{message_id}): {err}", flush=True)
+        return False
+
+
+def navigate(chat_id, screen, first_name="there", from_back=False, panel_message_id=None):
+    with _nav_lock:
+        state = _nav.setdefault(chat_id, {"current": None, "stack": [], "message_id": None})
+
+        if from_back:
+            if not state["stack"]:
+                return False
+            screen = state["stack"].pop()
+        elif state["current"] and state["current"] != screen:
+            state["stack"].append(state["current"])
+            if len(state["stack"]) > 12:
+                state["stack"] = state["stack"][-12:]
+
+        state["current"] = screen
+        image, caption = screen_content(screen, first_name)
+        markup = main_menu(show_back=bool(state["stack"]))
+        target_id = panel_message_id or state.get("message_id")
+
+        # 1) Prefer editing the current panel (no delete)
+        if target_id and edit_banner(chat_id, target_id, image, caption, reply_markup=markup):
+            state["message_id"] = target_id
+            return True
+
+        # 2) No panel yet / edit impossible: send ONE new panel
+        new_id = send_banner(chat_id, image, caption, reply_markup=markup)
+        old_id = state.get("message_id")
+        state["message_id"] = new_id
+
+        # Only remove the old panel after the new one exists (and never in a loop)
+        if old_id and new_id and old_id != new_id:
+            delete_message_safe(chat_id, old_id)
+        return True
+
+
+def handle_command(message, screen):
+    first_name = message.from_user.first_name or "there"
+    user_cmd_id = message.message_id
+    chat_id = message.chat.id
+
+    navigate(chat_id, screen, first_name=first_name)
+    # Delete the user's /command bubble after the panel updates
+    delete_message_safe(chat_id, user_cmd_id)
+
+
+@bot.message_handler(commands=["start"])
+def start(message):
+    handle_command(message, "start")
+
+
+@bot.message_handler(commands=["membership", "pricing", "buy"])
+def membership(message):
+    handle_command(message, "membership")
+
+
+@bot.message_handler(commands=["help"])
+def help_command(message):
+    handle_command(message, "help")
+
+
+@bot.callback_query_handler(func=lambda call: call.data == "nav:back")
+def on_back(call):
+    first_name = call.from_user.first_name or "there"
+    ok = navigate(
+        call.message.chat.id,
+        None,
+        first_name=first_name,
+        from_back=True,
+        panel_message_id=call.message.message_id,
+    )
+    try:
+        if ok:
+            bot.answer_callback_query(call.id)
+        else:
+            bot.answer_callback_query(call.id, "Nothing to go back to")
+    except Exception:
+        pass
+
+
+@bot.message_handler(func=lambda message: True)
+def default_reply(message):
+    # Don't touch the panel or delete random messages — avoids wipe/resend loops
+    try:
+        bot.reply_to(
+            message,
+            "Use /start, /membership, or /help.",
+        )
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
@@ -196,4 +337,4 @@ if __name__ == "__main__":
     except Exception as err:
         print(f"Startup sync skipped: {err}", flush=True)
 
-    bot.infinity_polling(timeout=60, long_polling_timeout=50)
+    bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=True)

@@ -7,8 +7,7 @@ const CHARLEY_PANGUS_LOGO = 'assets/charley-pangus-logo.gif';
 
 /* Vault owner — only this Telegram account can unlock Vault Admin.
    Open the Mini App in Telegram → owner ID/username is detected → password prompt.
-   Browser visits to https://jawhwf.github.io/J2026VAULT/ are gated.
-   TEMP: local/file opens skip the gate for editing — reclose when user asks. */
+   Browser / local file / GitHub Pages visits stay gated and never show Vault Admin. */
 const VAULT_OWNER_TELEGRAM_IDS = [6690519994];
 const VAULT_OWNER_TELEGRAM_USERNAMES = []; // optional: ['your_username']
 const VAULT_ADMIN_PASSWORD = 'JAWH2005!';
@@ -19,17 +18,8 @@ let vaultAdminUnlocked = false;
 let vaultAdminPromptDismissed = false;
 const PROFILE_NAME_KEY = 'j2026vault_profile_name';
 
-/* NOTE: these are placeholder EXAMPLES to demonstrate the template layout.
-   No real products are listed. Swap this array for live data later. */
-const BASE_PRODUCTS = [
-  { id: 1, title: 'Example Leaker Bundle', author: 'Studio Name', price: 9.99, oldPrice: 16.99, type: 'bundle', planRequired: 'ACOLYTE', thumb: 'thumb-1', badges: ['off', 'bundle'], discount: '45% OFF', downloads: '10+', favs: 1, version: '1.0', format: '.zip', software: 'Photoshop', systems: ['photoshop', 'premiere', 'after-effects'], delivery: 'mega', tags: ['example', 'bundle', 'leaker'], about: 'Paid bundle for Leaker-tier members. Lurker can still purchase at the sale price — subscription not included.' },
-  { id: 2, title: 'Example Premium Asset', author: 'Studio Name', price: 4.99, type: 'premium', planRequired: 'ACOLYTE', thumb: 'thumb-2', badges: ['premium'], downloads: '20+', favs: 1, version: 'v1.0.3', format: '.ccx', software: 'Photoshop', systems: ['photoshop'], delivery: 'google-drive', tags: ['example', 'premium'], about: 'Premium drop for Leaker or Heavenly plans, or buy outright.' },
-  { id: 3, title: 'Example Free Pack', author: 'Studio Name', price: 0, type: 'free', planRequired: 'MORTAL', thumb: 'thumb-3', badges: ['free'], downloads: '50+', favs: 12, version: '2026', format: '.jpg', software: 'Any', systems: ['windows', 'apple'], delivery: 'telegram', tags: ['example', 'free'], about: 'Free catalog item — download instantly on Lurker. No subscription needed.' },
-  { id: 4, title: 'Example Exclusive', author: 'Studio Name', price: 6.99, type: 'exclusive', planRequired: 'ETERNAL', thumb: 'thumb-4', badges: ['exclusive'], downloads: '10+', favs: 1, version: '1.1.0', format: '.abr', software: 'Photoshop', systems: ['photoshop', 'davinci'], delivery: 'google-drive', tags: ['example', 'exclusive'], about: 'Exclusive vault item — Heavenly plan required, or purchase separately.' },
-  { id: 5, title: 'Example Premium Pack', author: 'Studio Name', price: 2.99, type: 'premium', planRequired: 'ACOLYTE', thumb: 'thumb-5', badges: ['premium'], downloads: '15+', favs: 3, version: '1.0', format: '.png', software: 'Any', systems: ['premiere', 'after-effects'], delivery: 'mega', tags: ['example', 'premium'], about: 'Another Leaker-tier premium item for catalog variety.' },
-  { id: 6, title: 'Example Lurker Pack', author: 'Studio Name', price: 0, type: 'free', planRequired: 'MORTAL', thumb: 'thumb-6', badges: ['free'], downloads: '25+', favs: 6, version: '2.0', format: '.svg', software: 'Illustrator', systems: ['apple', 'windows'], delivery: 'telegram', tags: ['example', 'free'], about: 'Second free example — always shows the Lurker plan badge.' },
-  { id: 7, title: 'Example Heavenly Bundle', author: 'Studio Name', price: 49.99, oldPrice: 99.99, type: 'bundle', planRequired: 'ETERNAL', thumb: 'thumb-7', badges: ['off', 'bundle'], discount: '50% OFF', downloads: '5+', favs: 2, version: '2.0', format: '.zip', software: 'Photoshop', systems: ['photoshop', 'premiere', 'davinci'], delivery: 'google-drive', tags: ['example', 'bundle', 'heavenly'], about: 'Top-tier bundle — Heavenly plan badge only. Purchase or subscribe to unlock.' },
-];
+/* Live catalog starts empty — only Vault Admin posts appear here. */
+const BASE_PRODUCTS = [];
 
 const SYSTEM_ICONS = {
   photoshop: 'assets/system-icons/photoshop.gif',
@@ -767,9 +757,22 @@ function renderVaultBadge() {
   </span>`;
 }
 
+function isExampleProduct(product) {
+  if (!product) return true;
+  if (product.custom === true) return false;
+  const title = String(product.title || '');
+  if (/^Example\b/i.test(title)) return true;
+  if (Array.isArray(product.tags) && product.tags.some(t => String(t).toLowerCase() === 'example')) return true;
+  // Legacy placeholder IDs from the old demo catalog
+  if ([1, 2, 3, 4, 5, 6, 7].includes(Number(product.id)) && !product.coverImage) return true;
+  return false;
+}
+
 function isCustomProduct(product) {
   if (!product) return false;
-  return product.custom === true || !BASE_PRODUCT_IDS.has(product.id);
+  if (product.custom === true) return true;
+  if (isExampleProduct(product)) return false;
+  return !BASE_PRODUCT_IDS.has(product.id);
 }
 
 function configuredVaultOwnerIds() {
@@ -783,39 +786,27 @@ function configuredVaultOwnerUsernames() {
 }
 
 function isVaultOwnerDevOverride() {
-  // Dev override is local-only — never honor it on GitHub Pages / public hosts
-  if (!isLocalDevHost()) return false;
-  try {
-    if (new URLSearchParams(window.location.search).get('vault_owner') === '1') return true;
-    return sessionStorage.getItem('j2026vault_owner_dev') === '1';
-  } catch {
-    return false;
-  }
+  // Dev override removed — Vault Admin only works inside Telegram as the owner.
+  return false;
 }
 
 function persistVaultOwnerDevOverride() {
-  if (!isLocalDevHost()) {
-    try { sessionStorage.removeItem('j2026vault_owner_dev'); } catch {}
-    return;
-  }
-  try {
-    if (new URLSearchParams(window.location.search).get('vault_owner') === '1') {
-      sessionStorage.setItem('j2026vault_owner_dev', '1');
-    }
-  } catch {}
+  try { sessionStorage.removeItem('j2026vault_owner_dev'); } catch {}
 }
 
 function matchesConfiguredVaultOwner(user) {
   if (!user) return false;
   const ids = configuredVaultOwnerIds();
   const names = configuredVaultOwnerUsernames();
+  if (!ids.length && !names.length) return false;
   if (ids.length && ids.includes(Number(user.id))) return true;
   if (names.length && user.username && names.includes(String(user.username).toLowerCase())) return true;
   return false;
 }
 
 function isVaultOwnerIdentity() {
-  if (isVaultOwnerDevOverride()) return true;
+  // Must be a real Telegram Mini App session + configured owner account
+  if (!isInsideTelegramMiniApp()) return false;
   return matchesConfiguredVaultOwner(telegramUser);
 }
 
@@ -835,9 +826,18 @@ function writeVaultAdminUnlock(unlocked) {
   } catch {}
 }
 
+function resetVaultAdminSession() {
+  vaultAdminUnlocked = false;
+  vaultAdminPromptDismissed = false;
+  writeVaultAdminUnlock(false);
+  applyVaultAdminAccess();
+}
+
 function canAccessVaultAdmin() {
+  if (!isInsideTelegramMiniApp()) return false;
+  if (!matchesConfiguredVaultOwner(telegramUser)) return false;
   if (vaultAdminPromptDismissed) return false;
-  return isVaultOwnerIdentity() && vaultAdminUnlocked;
+  return vaultAdminUnlocked;
 }
 
 function initTelegramUser() {
@@ -878,16 +878,13 @@ function isLocalDevHost() {
 }
 
 function isTelegramGateBypassed() {
-  // TEMP: local/file always open for editing. Public GitHub URL stays gated.
-  // Re-enable local gate later when user asks to "reclose" it.
-  if (isLocalDevHost()) return true;
+  // No bypass — local file, localhost, and GitHub Pages all require Telegram.
   return false;
 }
 
 function shouldShowTelegramGate() {
-  if (isTelegramGateBypassed()) return false;
-  // Blocks browser visits to https://jawhwf.github.io/J2026VAULT/ (and any other host)
-  // unless Telegram actually opened the Mini App with a signed user session.
+  // Blocks browser / local / GitHub visits unless Telegram opened the Mini App
+  // with a signed user session (initData + user).
   return !isInsideTelegramMiniApp();
 }
 
@@ -1002,6 +999,11 @@ function dismissAdminPasswordPrompt() {
 }
 
 function submitAdminPassword() {
+  if (!isVaultOwnerIdentity()) {
+    showToast('Vault Admin is only available to the vault owner');
+    dismissAdminPasswordPrompt();
+    return false;
+  }
   const input = document.getElementById('adminPasswordInput');
   const errorEl = document.getElementById('adminPasswordError');
   const overlay = document.getElementById('adminPasswordModal');
@@ -1075,8 +1077,8 @@ let editingProductId = null;
 /* Subscription — starts on free plan, no localStorage */
 const PLAN_META = {
   MORTAL:  { duration: 'Viewer only · never expires', forever: true, credits: 0 },
-  ACOLYTE: { duration: '1 month', days: 30, credits: 2 },
-  ETERNAL: { duration: 'Forever', forever: true, credits: 'Unlimited' },
+  ACOLYTE: { duration: '1 month', days: 30, credits: 0 },
+  ETERNAL: { duration: 'Forever', forever: true, credits: 0 },
 };
 
 const PLAN_DISPLAY = {
@@ -1095,9 +1097,9 @@ const PLAN_DISPLAY = {
   ACOLYTE: {
     crown: 'assets/crown-leaker.gif',
     period: '1 month',
-    feats: ['2 premium', '5 / day', '8% referral'],
-    blurb: 'Unlock premium & exclusive drops with monthly credits. Renews every 30 days — cancel anytime.',
-    price: '$9.99',
+    feats: ['FREE / Lurker items', 'Premium access', 'Monthly plan'],
+    blurb: 'One-month access to FREE / Lurker-labeled items plus selected premium assets. Renews every 30 days — DM staff or owner to cancel.',
+    price: '$5',
     pricePeriod: '/ month',
     iconWrap: 'plan-icon-wrap plan-icon-current',
     name: 'Leaker',
@@ -1105,9 +1107,9 @@ const PLAN_DISPLAY = {
   ETERNAL: {
     crown: 'assets/crown-heavenly.gif',
     period: 'Forever',
-    feats: ['6 premium', 'Unlimited', '20% referral'],
-    blurb: 'One payment, lifetime access. Unlimited credits, every premium item — yours forever.',
-    price: '$199.99',
+    feats: ['Lifetime access', 'All premium', 'One-time pay'],
+    blurb: 'One-time payment for lifetime vault access. Every premium item is yours — no renewals.',
+    price: '$100',
     pricePeriod: 'one-time',
     iconWrap: 'plan-icon-wrap plan-icon-heavenly',
     cardExtra: 'plan-card-current-heavenly',
@@ -1260,7 +1262,11 @@ function updatePremiumUI() {
   }
   if (sub) sub.textContent = active ? meta.duration : FREE_VIEWER_COPY.subtitle;
   if (planEl) planEl.textContent = active ? meta.duration : FREE_VIEWER_COPY.plan;
-  if (creditsEl) creditsEl.textContent = active ? String(subscription.credits) : '0';
+  if (creditsEl) {
+    if (!active) creditsEl.textContent = 'Free';
+    else if (subscription.plan === 'ETERNAL') creditsEl.textContent = 'Lifetime';
+    else creditsEl.textContent = 'Premium';
+  }
 
   if (!active) {
     if (daysEl) daysEl.textContent = FREE_VIEWER_COPY.daysLeft;
@@ -1927,8 +1933,8 @@ function showSubscriptionCelebration(planName) {
   document.getElementById('celebrateSub').innerHTML = `${planNameHtml} subscription active — premium & exclusive unlocked`;
   const hint = document.getElementById('celebrateHint');
   hint.textContent = meta.forever
-    ? 'Unlimited credits · lifetime access'
-    : `${meta.duration} · ${meta.credits} premium credits`;
+    ? 'Lifetime access · all premium items'
+    : `${meta.duration} · FREE / Lurker items + premium access`;
   hint.hidden = false;
 
   document.getElementById('celebratePrimary').textContent = 'Explore catalog';
@@ -3717,17 +3723,29 @@ function getNextProductId() {
 
 function saveCatalogProducts() {
   try {
-    localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(PRODUCTS));
+    const live = PRODUCTS.filter(p => !isExampleProduct(p));
+    PRODUCTS = live;
+    localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(live));
   } catch {}
 }
 
 function loadCatalogProducts() {
   try {
     const raw = localStorage.getItem(CATALOG_STORAGE_KEY);
-    if (!raw) return;
+    if (!raw) {
+      PRODUCTS = [];
+      return;
+    }
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length) PRODUCTS = parsed;
-  } catch {}
+    if (!Array.isArray(parsed)) {
+      PRODUCTS = [];
+      return;
+    }
+    PRODUCTS = parsed.filter(p => p && !isExampleProduct(p));
+    localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(PRODUCTS));
+  } catch {
+    PRODUCTS = [];
+  }
 }
 
 function syncCatalogUI() {
@@ -3735,6 +3753,7 @@ function syncCatalogUI() {
   filterProducts();
   renderFavourites();
   renderPurchases();
+  renderFeaturedCarousel();
   if (currentProduct) {
     const fresh = PRODUCTS.find(p => p.id === currentProduct.id);
     if (fresh) openProduct(fresh);
@@ -4495,14 +4514,248 @@ document.querySelectorAll('#payMethods .pay-method').forEach(m => {
   });
 });
 
+const scanPayQrModal = document.getElementById('scanPayQrModal');
+const BTC_CASHAPP_ADDRESS = 'bc1q5auzqkfqg5ualm99zwzl7u5553srcmmjcsv6d5';
+const STRIPE_CHECKOUT_LINKS = {
+  ACOLYTE: 'https://buy.stripe.com/test_9B614o3Qogol0hF4qcbsc00',
+  ETERNAL: 'https://buy.stripe.com/test_4gM4gA0Ec2xv5BZe0Mbsc01',
+};
+const SCAN_PAY_METHODS = {
+  mastercard: {
+    label: 'Mastercard',
+    icon: 'assets/payment-icons/mastercard.gif',
+    title: 'Card checkout',
+    sub: 'Continue to Stripe to pay with your card. After paying, DM staff and the owner with a screenshot of proof.',
+    theme: 'card',
+    stripe: true,
+  },
+  visa: {
+    label: 'Visa',
+    icon: 'assets/payment-icons/visa.gif',
+    title: 'Card checkout',
+    sub: 'Continue to Stripe to pay with your card. After paying, DM staff and the owner with a screenshot of proof.',
+    theme: 'card',
+    stripe: true,
+  },
+  cashapp: {
+    label: 'Cash App',
+    icon: 'assets/payment-icons/cashapp.gif',
+    qr: 'assets/payment-icons/cashapp-qr.svg',
+    qrAlt: 'Cash App payment QR code',
+    sub: 'Open Cash App and scan this code to complete your payment.',
+    theme: 'cashapp',
+  },
+  paypal: {
+    label: 'PayPal',
+    icon: 'assets/payment-icons/paypal.gif',
+    qr: 'assets/payment-icons/paypal-qr.jpg',
+    qrAlt: 'PayPal payment QR code',
+    sub: 'Open PayPal and scan this code to complete your payment.',
+    theme: 'paypal',
+  },
+  zelle: {
+    label: 'Zelle',
+    icon: 'assets/payment-icons/zelle.gif',
+    qr: 'assets/payment-icons/zelle-qr.png',
+    qrAlt: 'Zelle payment QR code',
+    sub: 'Open your banking app and scan this Zelle code to complete your payment.',
+    theme: 'zelle',
+  },
+  bitcoin: {
+    label: 'Bitcoin',
+    icon: 'assets/payment-icons/bitcoin.gif',
+    title: 'Copy address',
+    sub: 'Send Bitcoin to this Cash App BTC address, then DM staff and the owner with proof.',
+    theme: 'bitcoin',
+    address: BTC_CASHAPP_ADDRESS,
+    addressOnly: true,
+  },
+};
+
+function getSelectedPayMethod() {
+  return document.querySelector('#payMethods .pay-method.is-selected')?.dataset?.method || null;
+}
+
+function getStripeCheckoutUrl(plan) {
+  return STRIPE_CHECKOUT_LINKS[plan] || null;
+}
+
+function openExternalCheckout(url) {
+  if (!url) return;
+  const tg = window.Telegram?.WebApp;
+  if (tg?.openLink) {
+    tg.openLink(url);
+    return;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+function openScanPayQrModal(method) {
+  const config = SCAN_PAY_METHODS[method];
+  if (!config) return;
+
+  const plan = pendingPlan?.plan;
+  const price = pendingPlan?.price;
+  const planLabel = PLAN_DISPLAY[plan]?.name || plan || 'Plan';
+  const planEl = document.getElementById('scanPayQrPlan');
+  if (planEl) {
+    planEl.textContent = price != null
+      ? `${planLabel} · $${price}`
+      : planLabel;
+  }
+
+  const brandIcon = document.getElementById('scanPayQrBrandIcon');
+  const eyebrow = document.getElementById('scanPayQrEyebrow');
+  const title = document.getElementById('scanPayQrTitle');
+  const sub = document.getElementById('scanPayQrSub');
+  const frame = document.getElementById('scanPayQrFrame');
+  const qr = document.getElementById('scanPayQrCode');
+  const addressRow = document.getElementById('scanPayAddressRow');
+  const addressText = document.getElementById('scanPayAddressText');
+  const addressCopy = document.getElementById('scanPayAddressCopy');
+  const stripeBtn = document.getElementById('scanPayStripeBtn');
+  const themeClasses = ['is-paypal', 'is-zelle', 'is-bitcoin', 'is-card'];
+  const addressOnly = !!config.addressOnly;
+  const stripeOnly = !!config.stripe;
+  const stripeUrl = stripeOnly ? getStripeCheckoutUrl(plan) : null;
+
+  if (brandIcon) brandIcon.src = config.icon;
+  if (eyebrow) {
+    eyebrow.textContent = config.label;
+    themeClasses.forEach(c => eyebrow.classList.remove(c));
+    if (config.theme === 'paypal') eyebrow.classList.add('is-paypal');
+    if (config.theme === 'zelle') eyebrow.classList.add('is-zelle');
+    if (config.theme === 'bitcoin') eyebrow.classList.add('is-bitcoin');
+    if (config.theme === 'card') eyebrow.classList.add('is-card');
+  }
+  if (title) title.textContent = config.title || 'Scan to pay';
+  if (sub) {
+    if (stripeOnly && plan === 'ACOLYTE') {
+      sub.textContent = 'Continue to Stripe for the $5/month Leaker plan. After paying, DM staff and the owner with a screenshot of proof.';
+    } else if (stripeOnly && plan === 'ETERNAL') {
+      sub.textContent = 'Continue to Stripe for the $100 one-time HEAVENLY plan. After paying, DM staff and the owner with a screenshot of proof.';
+    } else {
+      sub.textContent = config.sub;
+    }
+  }
+  if (frame) {
+    themeClasses.forEach(c => frame.classList.remove(c));
+    if (config.theme === 'paypal') frame.classList.add('is-paypal');
+    if (config.theme === 'zelle') frame.classList.add('is-zelle');
+    if (config.theme === 'bitcoin') frame.classList.add('is-bitcoin');
+    frame.hidden = addressOnly || stripeOnly || !config.qr;
+  }
+  if (qr && config.qr) {
+    qr.src = config.qr;
+    qr.alt = config.qrAlt || 'Payment QR code';
+  }
+  if (addressRow && addressText) {
+    if (config.address) {
+      addressText.textContent = config.address;
+      addressRow.hidden = false;
+      addressRow.classList.add('is-visible');
+      if (addressCopy) {
+        addressCopy.hidden = false;
+        addressCopy.classList.add('is-visible');
+      }
+    } else {
+      addressText.textContent = '';
+      addressRow.hidden = true;
+      addressRow.classList.remove('is-visible');
+      if (addressCopy) {
+        addressCopy.hidden = true;
+        addressCopy.classList.remove('is-visible');
+      }
+    }
+  }
+  if (stripeBtn) {
+    if (stripeOnly && stripeUrl) {
+      stripeBtn.hidden = false;
+      stripeBtn.classList.add('is-visible');
+      stripeBtn.dataset.checkoutUrl = stripeUrl;
+    } else {
+      stripeBtn.hidden = true;
+      stripeBtn.classList.remove('is-visible');
+      delete stripeBtn.dataset.checkoutUrl;
+    }
+  }
+
+  scanPayQrModal.classList.add('open');
+  scanPayQrModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeScanPayQrModal() {
+  scanPayQrModal.classList.remove('open');
+  scanPayQrModal.setAttribute('aria-hidden', 'true');
+}
+
+document.getElementById('scanPayQrClose').addEventListener('click', closeScanPayQrModal);
+document.getElementById('scanPayQrDone').addEventListener('click', closeScanPayQrModal);
+scanPayQrModal.addEventListener('click', e => {
+  if (e.target === scanPayQrModal) closeScanPayQrModal();
+});
+
+document.getElementById('scanPayAddressCopy')?.addEventListener('click', async () => {
+  const text = document.getElementById('scanPayAddressText')?.textContent?.trim();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Bitcoin address copied');
+  } catch {
+    showToast('Could not copy address');
+  }
+});
+
+document.getElementById('scanPayStripeBtn')?.addEventListener('click', () => {
+  const url = document.getElementById('scanPayStripeBtn')?.dataset?.checkoutUrl;
+  if (!url) {
+    showToast('Checkout link unavailable for this plan');
+    return;
+  }
+  openExternalCheckout(url);
+  closeScanPayQrModal();
+  openStripeFinishModal();
+});
+
+const stripeFinishModal = document.getElementById('stripeFinishModal');
+
+function openStripeFinishModal() {
+  const plan = pendingPlan?.plan;
+  const price = pendingPlan?.price;
+  const planLabel = PLAN_DISPLAY[plan]?.name || plan || 'Plan';
+  const planEl = document.getElementById('stripeFinishPlan');
+  if (planEl) {
+    planEl.textContent = price != null
+      ? `${planLabel} · $${price}`
+      : planLabel;
+  }
+  stripeFinishModal.classList.add('open');
+  stripeFinishModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeStripeFinishModal() {
+  stripeFinishModal.classList.remove('open');
+  stripeFinishModal.setAttribute('aria-hidden', 'true');
+}
+
+document.getElementById('stripeFinishClose')?.addEventListener('click', closeStripeFinishModal);
+document.getElementById('stripeFinishDone')?.addEventListener('click', closeStripeFinishModal);
+stripeFinishModal?.addEventListener('click', e => {
+  if (e.target === stripeFinishModal) closeStripeFinishModal();
+});
+
 document.getElementById('createPaymentBtn').addEventListener('click', () => {
-  const name = pendingPlan?.plan;
-  if (name) {
-    applySubscription(name);
-    if (currentProduct) refreshBuyButton(currentProduct);
+  const method = getSelectedPayMethod();
+  if (!SCAN_PAY_METHODS[method]) {
+    showToast('Select a supported payment method');
+    return;
+  }
+  if (SCAN_PAY_METHODS[method].stripe && !getStripeCheckoutUrl(pendingPlan?.plan)) {
+    showToast('Card checkout is only for Leaker or HEAVENLY');
+    return;
   }
   closePaymentModal();
-  if (name) showSubscriptionCelebration(name);
+  openScanPayQrModal(method);
 });
 
 /* ── Card template ── */
@@ -4983,34 +5236,143 @@ function renderPurchases() {
   updateNavBadges();
 }
 
-/* ── Carousel ── */
-const slideCount = carouselTrack.children.length;
+/* ── Carousel (featured catalog posts) ── */
+const FEATURED_SLIDE_LIMIT = 16;
+const HERO_GRADIENTS = ['hero-1', 'hero-2', 'hero-3', 'hero-4'];
+
+function getFeaturedProducts() {
+  const customs = PRODUCTS.filter(isCustomProduct).sort((a, b) => {
+    const aTime = Date.parse(a.createdAt || '') || 0;
+    const bTime = Date.parse(b.createdAt || '') || 0;
+    if (bTime !== aTime) return bTime - aTime;
+    return (Number(b.id) || 0) - (Number(a.id) || 0);
+  });
+  return customs.slice(0, FEATURED_SLIDE_LIMIT);
+}
+
+function getSlideCount() {
+  return carouselTrack?.children?.length || 0;
+}
 
 function buildDots() {
+  if (!carouselDots || !carouselTrack) return;
+  const count = getSlideCount();
   carouselDots.innerHTML = '';
-  for (let i = 0; i < slideCount; i++) {
+  for (let i = 0; i < count; i++) {
     const dot = document.createElement('button');
-    dot.className = `carousel-dot${i === 0 ? ' active' : ''}`;
+    dot.className = `carousel-dot${i === carouselIndex ? ' active' : ''}`;
     dot.setAttribute('aria-label', `Slide ${i + 1}`);
     dot.addEventListener('click', () => goToSlide(i));
     carouselDots.appendChild(dot);
   }
 }
+
 function goToSlide(i) {
-  carouselIndex = i;
-  carouselTrack.style.transform = `translateX(-${i * 100}%)`;
-  carouselDots.querySelectorAll('.carousel-dot').forEach((d, idx) => d.classList.toggle('active', idx === i));
+  const count = getSlideCount();
+  if (!count || !carouselTrack) return;
+  carouselIndex = ((i % count) + count) % count;
+  carouselTrack.style.transform = `translateX(-${carouselIndex * 100}%)`;
+  carouselDots?.querySelectorAll('.carousel-dot').forEach((d, idx) => {
+    d.classList.toggle('active', idx === carouselIndex);
+  });
 }
-function nextSlide() { goToSlide((carouselIndex + 1) % slideCount); }
-function startCarousel() { buildDots(); clearInterval(carouselTimer); carouselTimer = setInterval(nextSlide, 4500); }
+
+function nextSlide() {
+  const count = getSlideCount();
+  if (count < 2) return;
+  goToSlide(carouselIndex + 1);
+}
+
+function startCarousel() {
+  renderFeaturedCarousel();
+}
+
+function renderFeaturedCarousel() {
+  if (!carouselTrack) return;
+  const featured = getFeaturedProducts();
+  const previousId = carouselTrack.querySelector('.carousel-slide.is-active-slide')?.dataset?.productId
+    || carouselTrack.children[carouselIndex]?.dataset?.productId;
+
+  carouselTrack.innerHTML = '';
+
+  if (!featured.length) {
+    const slide = document.createElement('div');
+    slide.className = 'carousel-slide';
+    slide.innerHTML = `<div class="hero-card hero-1"><span class="hero-label">Featured posts</span></div>`;
+    carouselTrack.appendChild(slide);
+  } else {
+    featured.forEach((product, i) => {
+      const slide = document.createElement('div');
+      slide.className = 'carousel-slide';
+      slide.dataset.productId = String(product.id);
+
+      const card = document.createElement('div');
+      const gradient = HERO_GRADIENTS[i % HERO_GRADIENTS.length];
+      card.className = `hero-card ${gradient} is-clickable`;
+      card.setAttribute('role', 'button');
+      card.setAttribute('tabindex', '0');
+      card.setAttribute('aria-label', `Open ${product.title}`);
+
+      if (product.coverImage) {
+        card.classList.add('has-cover-image');
+        const img = document.createElement('img');
+        img.className = 'hero-cover-img';
+        img.src = product.coverImage;
+        img.alt = product.title || 'Featured post';
+        card.appendChild(img);
+      } else if (product.thumb) {
+        card.classList.add(product.thumb);
+      }
+
+      const label = document.createElement('span');
+      label.className = 'hero-label';
+      label.textContent = product.title || 'Featured post';
+      card.appendChild(label);
+
+      const open = () => openProduct(product);
+      card.addEventListener('click', open);
+      card.addEventListener('keydown', e => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          open();
+        }
+      });
+
+      slide.appendChild(card);
+      carouselTrack.appendChild(slide);
+    });
+  }
+
+  let nextIndex = 0;
+  if (previousId) {
+    const idx = [...carouselTrack.children].findIndex(el => el.dataset.productId === String(previousId));
+    if (idx >= 0) nextIndex = idx;
+  }
+  // New custom posts lead the slideshow — jump to the newest featured slide
+  if (featured[0] && isCustomProduct(featured[0]) && String(featured[0].id) !== String(previousId || '')) {
+    nextIndex = 0;
+  }
+
+  carouselIndex = nextIndex;
+  buildDots();
+  goToSlide(carouselIndex);
+  clearInterval(carouselTimer);
+  if (getSlideCount() > 1) {
+    carouselTimer = setInterval(nextSlide, 4500);
+  }
+}
 
 let touchStartX = 0;
-const carEl = carouselTrack.parentElement;
-carEl.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
-carEl.addEventListener('touchend', e => {
-  const diff = touchStartX - e.changedTouches[0].clientX;
-  if (Math.abs(diff) > 40) diff > 0 ? nextSlide() : goToSlide((carouselIndex - 1 + slideCount) % slideCount);
-}, { passive: true });
+const carEl = carouselTrack?.parentElement;
+if (carEl) {
+  carEl.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+  carEl.addEventListener('touchend', e => {
+    const count = getSlideCount();
+    if (count < 2) return;
+    const diff = touchStartX - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 40) diff > 0 ? nextSlide() : goToSlide(carouselIndex - 1);
+  }, { passive: true });
+}
 
 /* ── Profile avatar (PNG / GIF) ── */
 let avatarObjectUrl = null;
@@ -5073,7 +5435,7 @@ function showToast(msg = 'Copied!') {
 /* ── Keyboard ── */
 document.addEventListener('keydown', e => {
   if (e.key === 'ArrowRight') nextSlide();
-  if (e.key === 'ArrowLeft') goToSlide((carouselIndex - 1 + slideCount) % slideCount);
+  if (e.key === 'ArrowLeft') goToSlide(carouselIndex - 1);
   if (e.key === 'Escape' && celebrateOverlay.classList.contains('open')) closeCelebrate();
 });
 
@@ -5089,7 +5451,8 @@ const SPLASH_MIN_MS = 850;
 const SPLASH_SLOW_MS = 3200;
 const SPLASH_TIPS = [
   'Lurker plan: download anything with a Lurker badge in Catalog.',
-  'Premium & Exclusive items need Leaker or Heavenly.',
+  'Leaker unlocks selected premium assets for one month.',
+  'Heavenly is a one-time payment for lifetime premium access.',
   'Tap the heart on any post to save it to Favourites.',
   'Bundles keep their discount — grab them while they\'re listed.',
   'Need help? Profile → Contact support opens our Discord.',
@@ -5102,15 +5465,23 @@ function wait(ms) {
 
 function initApp() {
   persistVaultOwnerDevOverride();
-  vaultAdminUnlocked = readVaultAdminUnlock();
   initTelegramUser();
 
   if (shouldShowTelegramGate()) {
+    resetVaultAdminSession();
     showTelegramGate();
     return false;
   }
 
   hideTelegramGate();
+
+  // Only restore admin unlock for the real owner inside Telegram
+  if (isVaultOwnerIdentity()) {
+    vaultAdminUnlocked = readVaultAdminUnlock();
+  } else {
+    resetVaultAdminSession();
+  }
+
   applyVaultAdminAccess();
   loadCatalogProducts();
   loadProfileName();
@@ -5130,10 +5501,11 @@ function initApp() {
 }
 
 async function runSplash() {
-  // Gate first — never boot the vault UI on a public browser URL
+  // Gate first — never boot the vault UI outside Telegram Mini App
   persistVaultOwnerDevOverride();
   initTelegramUser();
   if (shouldShowTelegramGate()) {
+    resetVaultAdminSession();
     showTelegramGate();
     return;
   }
