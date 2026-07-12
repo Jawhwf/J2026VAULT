@@ -7,20 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20260712n">
+  <link rel="stylesheet" href="css/styles.css?v=20260712r">
   <link rel="icon" href="assets/pfp.png" type="image/png">
   <link rel="preload" href="assets/j26-logo.svg" as="image" type="image/svg+xml">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
-    /* Fail closed on public hosts. TEMP: local/file unlocked for editing. */
+    /* Gate first: browser / local / file:// stay locked unless Telegram Mini App initData exists. */
     (function () {
-      var host = (location.hostname || '').toLowerCase();
-      var protocol = (location.protocol || '').toLowerCase();
-      var local = protocol === 'file:' || host === 'localhost' || host === '127.0.0.1' || host === '::1';
-      if (local) {
-        document.documentElement.classList.add('tg-session-ok');
-        return;
-      }
       try { sessionStorage.removeItem('j2026vault_owner_dev'); } catch (e) {}
       var tg = window.Telegram && window.Telegram.WebApp;
       var inside = !!(tg && tg.initData && String(tg.initData).trim()
@@ -28,6 +21,8 @@
         && (tg.initDataUnsafe.user.id || tg.initDataUnsafe.user.username));
       if (inside) {
         document.documentElement.classList.add('tg-session-ok');
+      } else {
+        document.documentElement.classList.remove('tg-session-ok');
       }
     })();
   </script>
@@ -75,7 +70,7 @@
       </div>
       <h1 class="tg-gate-title" id="telegramGateTitle">J2026Vault</h1>
       <p class="tg-gate-desc" id="telegramGateDesc">
-        This vault only runs inside Telegram. Opening the site link in a browser won’t work — open @J2026VaultBot and launch the Mini App from there.
+        This vault only runs inside Telegram. Opening the site link in a browser won’t work — open @J26VaultBot and launch the Mini App from there.
       </p>
       <ul class="tg-gate-features">
         <li>
@@ -91,7 +86,7 @@
           <span>Fast, smooth and secure</span>
         </li>
       </ul>
-      <a class="tg-gate-cta" id="telegramGateOpenBtn" href="https://t.me/J2026VaultBot" target="_blank" rel="noopener noreferrer">
+      <a class="tg-gate-cta" id="telegramGateOpenBtn" href="https://t.me/J26VaultBot" target="_blank" rel="noopener noreferrer">
         Open in Telegram
       </a>
     </div>
@@ -388,31 +383,42 @@
               <div class="pe-stats-edit">
                 <div>
                   <label class="admin-pass-label" for="peDownloads">Downloads</label>
-                  <input class="admin-pass-input" id="peDownloads" type="number" min="0" step="1" value="0">
+                  <input class="admin-pass-input pe-number-input" id="peDownloads" type="number" min="0" step="1" value="0">
                 </div>
                 <div>
                   <label class="admin-pass-label" for="pePurchases">Purchases</label>
-                  <input class="admin-pass-input" id="pePurchases" type="number" min="0" step="1" value="0">
+                  <input class="admin-pass-input pe-number-input" id="pePurchases" type="number" min="0" step="1" value="0">
                 </div>
               </div>
 
               <label class="admin-pass-label" for="pePlan">Subscription</label>
               <div class="pe-plan-picker" id="pePlanPicker" role="group" aria-label="Subscription">
-                <button type="button" class="pe-plan-chip" data-plan="MORTAL">Lurker</button>
-                <button type="button" class="pe-plan-chip" data-plan="ACOLYTE">Leaker</button>
-                <button type="button" class="pe-plan-chip" data-plan="ETERNAL">HEAVENLY</button>
+                <button type="button" class="pe-plan-chip" data-plan="MORTAL" aria-label="Lurker">
+                  <img src="assets/crown-lurker.gif" alt="" class="pe-plan-gif pe-plan-gif--lurker">
+                  <span>Lurker</span>
+                </button>
+                <button type="button" class="pe-plan-chip" data-plan="ACOLYTE" aria-label="Leaker">
+                  <img src="assets/crown-leaker.gif" alt="" class="pe-plan-gif pe-plan-gif--leaker">
+                  <span>Leaker</span>
+                </button>
+                <button type="button" class="pe-plan-chip" data-plan="ETERNAL" aria-label="HEAVENLY">
+                  <img src="assets/crown-heavenly.gif" alt="" class="pe-plan-gif pe-plan-gif--heavenly">
+                  <span>HEAVENLY</span>
+                </button>
               </div>
               <input type="hidden" id="pePlan" value="MORTAL">
 
               <div class="pe-days-wrap" id="peDaysWrap" hidden>
                 <label class="admin-pass-label" for="peDaysLeft">Days left (Leaker)</label>
-                <input class="admin-pass-input" id="peDaysLeft" type="number" min="1" max="3650" step="1" value="30">
+                <input class="admin-pass-input pe-number-input" id="peDaysLeft" type="number" min="1" max="3650" step="1" value="30">
                 <p class="pe-days-hint">HEAVENLY stays forever — days only apply to Leaker.</p>
               </div>
 
               <p class="admin-pass-error" id="peError" hidden></p>
-              <button type="button" class="admin-pass-submit" id="peSaveBtn">Save profile</button>
-              <button type="button" class="btn-outline editor-delete-btn" id="peDeleteBtn" hidden>Remove</button>
+              <div class="pe-sheet-actions">
+                <button type="button" class="admin-pass-submit" id="peSaveBtn">Save profile</button>
+                <button type="button" class="pe-remove-btn" id="peDeleteBtn" hidden>Remove member</button>
+              </div>
             </div>
           </div>
         </section>
@@ -1133,7 +1139,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="js/bundle-tgs-data.js?v=20260712k"></script>
-  <script src="js/vault-config.js?v=20260712n"></script>
-  <script src="js/app.js?v=20260712n"></script>
+  <script src="js/vault-config.js?v=20260712r"></script>
+  <script src="js/app.js?v=20260712r"></script>
 </body>
 </html>

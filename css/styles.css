@@ -3230,6 +3230,15 @@ body.plans-view .view.active > * {
   gap: 8px;
   padding-bottom: 28px;
 }
+.profile-editor-member-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+.profile-editor-member-row .profile-editor-member {
+  flex: 1;
+  min-width: 0;
+}
 .profile-editor-member {
   display: flex;
   align-items: center;
@@ -3278,13 +3287,24 @@ body.plans-view .view.active > * {
   flex-shrink: 0;
 }
 .profile-editor-member-plan {
-  padding: 4px 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
   border-radius: 999px;
-  font-size: 10px;
+  border: 1px solid rgba(139, 92, 246, 0.45);
+  color: #ddd6fe;
+  font-size: 11px;
   font-weight: 800;
-  color: var(--accent-bright);
-  background: var(--accent-dim);
-  border: 1px solid var(--accent-line);
+}
+.pe-list-crown {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+  display: block;
+}
+.pe-list-plan-label {
+  line-height: 1;
 }
 .profile-editor-member-days {
   font-size: 10px;
@@ -3340,12 +3360,18 @@ body.plans-view .view.active > * {
   margin-top: 6px;
 }
 .pe-plan-chip {
-  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 74px;
+  padding: 10px 6px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--surface-2);
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   font-family: var(--font);
   cursor: pointer;
@@ -3356,6 +3382,17 @@ body.plans-view .view.active > * {
   border-color: var(--accent-line);
   box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.2) inset;
 }
+.pe-plan-gif {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+  pointer-events: none;
+}
+.pe-plan-gif--heavenly {
+  width: 32px;
+  height: 32px;
+}
 .pe-days-wrap { margin-top: 4px; }
 .pe-days-hint {
   margin: 8px 0 0;
@@ -3364,6 +3401,59 @@ body.plans-view .view.active > * {
   color: var(--text-dim);
 }
 .pe-empty { margin-top: 12px; }
+.pe-sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.pe-sheet-actions .admin-pass-submit {
+  margin-top: 0;
+  width: 100%;
+}
+.pe-remove-btn {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.08);
+  color: #f87171;
+  font-size: 13px;
+  font-weight: 800;
+  font-family: var(--font);
+  cursor: pointer;
+}
+.pe-remove-btn:active {
+  filter: brightness(1.08);
+}
+.pe-member-remove {
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  background: rgba(248, 113, 113, 0.08);
+  color: #f87171;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.pe-number-input {
+  appearance: auto;
+  -moz-appearance: number-input;
+}
+.pe-number-input::-webkit-outer-spin-button,
+.pe-number-input::-webkit-inner-spin-button {
+  opacity: 1;
+  margin: 0 2px 0 8px;
+  height: 32px;
+  width: 16px;
+  cursor: pointer;
+  filter: invert(72%) sepia(42%) saturate(1200%) hue-rotate(220deg) brightness(1.05);
+}
 #view-profile-editor .admin-pass-label { margin-top: 12px; }
 #view-profile-editor .admin-pass-submit { margin-top: 16px; }
 #view-profile-editor .editor-delete-btn { width: 100%; margin-top: 8px; }

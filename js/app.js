@@ -969,14 +969,11 @@ function isLocalDevHost() {
 }
 
 function isTelegramGateBypassed() {
-  // TEMP: local/file open for editing. Public GitHub URL stays gated.
-  if (isLocalDevHost()) return true;
   return false;
 }
 
 function shouldShowTelegramGate() {
-  if (isTelegramGateBypassed()) return false;
-  // Blocks browser visits unless Telegram opened the Mini App with a signed user session.
+  // Blocks every browser visit unless Telegram opened the Mini App.
   return !isInsideTelegramMiniApp();
 }
 
@@ -1568,14 +1565,22 @@ function renderProfileEditorList() {
   }
   if (emptyEl) emptyEl.hidden = true;
   members.forEach(member => {
+    const row = document.createElement('div');
+    row.className = 'profile-editor-member-row';
+    row.dataset.memberId = String(member.id);
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'profile-editor-member';
-    btn.dataset.memberId = String(member.id);
     const avatar = member.avatarDataUrl || member.photoUrl || 'assets/pfp.png';
     const handle = member.username ? `@${member.username}` : `ID ${member.id}`;
     const via = member.firstSource || (member.sources && member.sources[0]) || '';
     const seen = member.lastSeenAt ? ` · seen ${String(member.lastSeenAt).slice(0, 10)}` : '';
+    const crown = member.plan === 'ETERNAL'
+      ? 'assets/crown-heavenly.gif'
+      : member.plan === 'ACOLYTE'
+        ? 'assets/crown-leaker.gif'
+        : 'assets/crown-lurker.gif';
     btn.innerHTML = `
       <img class="profile-editor-member-avatar" src="${avatar}" alt="" referrerpolicy="no-referrer">
       <span class="profile-editor-member-copy">
@@ -1583,17 +1588,34 @@ function renderProfileEditorList() {
         <span class="profile-editor-member-meta"></span>
       </span>
       <span class="profile-editor-member-side">
-        <span class="profile-editor-member-plan"></span>
+        <span class="profile-editor-member-plan">
+          <img class="pe-list-crown" src="${crown}" alt="">
+          <span class="pe-list-plan-label"></span>
+        </span>
         <span class="profile-editor-member-days"></span>
       </span>
     `;
     btn.querySelector('.profile-editor-member-name').textContent = member.name || handle;
     btn.querySelector('.profile-editor-member-meta').textContent =
       `${handle} · joined ${member.registeredAt || '—'}${via ? ` · ${via}` : ''}${seen}`;
-    btn.querySelector('.profile-editor-member-plan').textContent = planLabel(member.plan);
+    btn.querySelector('.pe-list-plan-label').textContent = planLabel(member.plan);
     btn.querySelector('.profile-editor-member-days').textContent = memberAccessLabel(member);
     btn.addEventListener('click', () => openProfileEditorSheet(member.id));
-    listEl.appendChild(btn);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'pe-member-remove';
+    removeBtn.setAttribute('aria-label', `Remove ${member.name || handle}`);
+    removeBtn.textContent = '×';
+    removeBtn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      deleteProfileEditorMember(member.id);
+    });
+
+    row.appendChild(btn);
+    row.appendChild(removeBtn);
+    listEl.appendChild(row);
   });
 }
 
@@ -1728,15 +1750,21 @@ async function saveProfileEditorMember() {
   showToast(`${planLabel(member.plan)} · ${member.name} saved`);
 }
 
-async function deleteProfileEditorMember() {
-  if (editingMemberId == null) return;
-  removeMemberFromCache(editingMemberId);
+async function deleteProfileEditorMember(memberId = null) {
+  const id = memberId != null ? memberId : editingMemberId;
+  if (id == null) return;
+  const member = findMemberInCache(id);
+  const label = member?.name || member?.username || `ID ${id}`;
+  if (!window.confirm(`Remove ${label} from the registry?`)) return;
+
+  removeMemberFromCache(id);
   try {
+    await resolveMembersApiUrl();
     if (readMembersApiUrl()) {
       await membersApiFetch('/api/members', { method: 'PUT', body: { members: membersCache } });
     }
   } catch {}
-  closeProfileEditorSheet();
+  if (editingMemberId === id) closeProfileEditorSheet();
   renderProfileEditorList();
   showToast('Member removed');
 }
