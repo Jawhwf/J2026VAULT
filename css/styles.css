@@ -1402,6 +1402,90 @@ img[src*="crown-lurker"] {
   letter-spacing: 0.01em;
 }
 
+.appearance-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 140;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: var(--pad);
+  padding-bottom: calc(var(--pad) + env(safe-area-inset-bottom, 0px));
+  background: rgba(6, 6, 9, 0.72);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.28s var(--ease);
+}
+.appearance-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.appearance-overlay[hidden] {
+  display: none !important;
+}
+.appearance-sheet {
+  width: min(100%, 420px);
+  max-height: min(78vh, 640px);
+  overflow: auto;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  padding: 18px 18px 16px;
+  box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.85);
+  transform: translateY(18px);
+  transition: transform 0.28s var(--ease);
+}
+.appearance-overlay.is-open .appearance-sheet {
+  transform: translateY(0);
+}
+.appearance-sheet-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.appearance-sheet-eyebrow {
+  margin: 0 0 4px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent-bright);
+}
+.appearance-sheet-head h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text);
+}
+.appearance-sheet-sub {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  max-width: 28ch;
+}
+.appearance-sheet-done {
+  width: 100%;
+  margin-top: 16px;
+  padding: 14px;
+  border: none;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-family: var(--font);
+  font-size: 15px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: filter 0.2s, box-shadow 0.2s;
+}
+.appearance-sheet-done:hover {
+  filter: brightness(1.08);
+  box-shadow: 0 12px 34px -14px var(--accent-glow);
+}
+
 .section-card { padding: 18px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 14px; }
 .profile-stack .section-card { margin-bottom: 0; }
 .section-card-head { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--accent-bright); margin-bottom: 16px; }

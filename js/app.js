@@ -6797,29 +6797,57 @@ function setAccentTheme(themeId, { toast = false } = {}) {
   return theme;
 }
 
+function openAppearanceSheet() {
+  initAccentThemePicker();
+  const sheet = document.getElementById('appearanceSheet');
+  if (!sheet) return;
+  sheet.hidden = false;
+  sheet.setAttribute('aria-hidden', 'false');
+  requestAnimationFrame(() => sheet.classList.add('is-open'));
+}
+
+function closeAppearanceSheet() {
+  const sheet = document.getElementById('appearanceSheet');
+  if (!sheet) return;
+  sheet.classList.remove('is-open');
+  sheet.setAttribute('aria-hidden', 'true');
+  window.setTimeout(() => {
+    if (!sheet.classList.contains('is-open')) sheet.hidden = true;
+  }, 280);
+}
+
 function initAccentThemePicker() {
   const host = document.getElementById('themeSwatches');
-  if (!host || host.dataset.ready === '1') {
+  if (!host) {
     syncAccentThemeUi(getSavedAccentThemeId());
     return;
   }
-  const themes = window.VAULT_ACCENT_THEMES || {};
-  host.innerHTML = '';
-  Object.values(themes).forEach(theme => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'theme-swatch';
-    btn.dataset.theme = theme.id;
-    btn.setAttribute('role', 'option');
-    btn.setAttribute('aria-label', theme.label);
-    btn.innerHTML = `<span class="theme-swatch-dot" style="--swatch:${theme.accent}"></span><span class="theme-swatch-label"></span>`;
-    btn.querySelector('.theme-swatch-label').textContent = theme.label;
-    btn.addEventListener('click', () => setAccentTheme(theme.id, { toast: true }));
-    host.appendChild(btn);
-  });
-  host.dataset.ready = '1';
+  if (host.dataset.ready !== '1') {
+    const themes = window.VAULT_ACCENT_THEMES || {};
+    host.innerHTML = '';
+    Object.values(themes).forEach(theme => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'theme-swatch';
+      btn.dataset.theme = theme.id;
+      btn.setAttribute('role', 'option');
+      btn.setAttribute('aria-label', theme.label);
+      btn.innerHTML = `<span class="theme-swatch-dot" style="--swatch:${theme.accent}"></span><span class="theme-swatch-label"></span>`;
+      btn.querySelector('.theme-swatch-label').textContent = theme.label;
+      btn.addEventListener('click', () => setAccentTheme(theme.id, { toast: true }));
+      host.appendChild(btn);
+    });
+    host.dataset.ready = '1';
+  }
   setAccentTheme(getSavedAccentThemeId(), { toast: false });
 }
+
+document.getElementById('openAppearanceBtn')?.addEventListener('click', openAppearanceSheet);
+document.getElementById('appearanceSheetClose')?.addEventListener('click', closeAppearanceSheet);
+document.getElementById('appearanceSheetDone')?.addEventListener('click', closeAppearanceSheet);
+document.getElementById('appearanceSheet')?.addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeAppearanceSheet();
+});
 
 /* ── Profile avatar (PNG / GIF) ── */
 let avatarObjectUrl = null;
