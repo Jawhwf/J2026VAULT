@@ -38,6 +38,15 @@ from config import (
     DISCORD_INVITE,
 )
 
+try:
+    from config import MEMBERS_API_HOST, MEMBERS_API_PORT
+except ImportError:
+    MEMBERS_API_HOST = "0.0.0.0"
+    MEMBERS_API_PORT = 8765
+
+from members_store import list_members, touch_from_telegram_user
+from members_api import is_owner_user, start_members_api
+
 BOT_USERNAME = "J2026VaultBot"
 ASSETS_DIR = Path(__file__).resolve().parent / "assets"
 
@@ -272,11 +281,19 @@ def navigate(chat_id, screen, first_name="there", from_back=False, panel_message
         return True
 
 
+def record_member(user):
+    try:
+        touch_from_telegram_user(user)
+    except Exception as err:
+        print(f"record_member failed: {err}", flush=True)
+
+
 def handle_command(message, screen):
     first_name = message.from_user.first_name or "there"
     user_cmd_id = message.message_id
     chat_id = message.chat.id
 
+    record_member(message.from_user)
     navigate(chat_id, screen, first_name=first_name)
     # Delete the user's /command bubble after the panel updates
     delete_message_safe(chat_id, user_cmd_id)
@@ -295,6 +312,42 @@ def membership(message):
 @bot.message_handler(commands=["help"])
 def help_command(message):
     handle_command(message, "help")
+
+
+@bot.message_handler(commands=["members"])
+def members_command(message):
+    """Owner-only quick list of registered members."""
+    record_member(message.from_user)
+    user = {
+        "id": message.from_user.id,
+        "username": message.from_user.username,
+    }
+    if not is_owner_user(user):
+        try:
+            bot.reply_to(message, "Owners only.")
+        except Exception:
+            pass
+        return
+
+    members = list_members()
+    if not members:
+        text = "No members registered yet.\nPeople appear after they /start the bot or open the Mini App."
+    else:
+        lines = [f"<b>Members ({len(members)})</b>", ""]
+        for m in members[:40]:
+            uname = f"@{m['username']}" if m.get("username") else "—"
+            lines.append(
+                f"• <b>{m.get('name') or 'User'}</b> ({uname})\n"
+                f"  id <code>{m['id']}</code> · {m.get('plan', 'MORTAL')} · reg {m.get('registeredAt', '—')}"
+            )
+        if len(members) > 40:
+            lines.append(f"\n…and {len(members) - 40} more")
+        text = "\n".join(lines)
+    try:
+        bot.reply_to(message, text)
+    except Exception:
+        pass
+    delete_message_safe(message.chat.id, message.message_id)
 
 
 @bot.callback_query_handler(func=lambda call: call.data == "nav:back")
@@ -343,6 +396,12 @@ if __name__ == "__main__":
     ):
         print(f"  {label}: {'OK' if path.exists() else 'MISSING'} — {path.name}", flush=True)
     print(f"Loaded: {Path(__file__).resolve()}", flush=True)
+    try:
+        start_members_api(API_TOKEN, host=MEMBERS_API_HOST, port=int(MEMBERS_API_PORT))
+        print(f"Members API: http://127.0.0.1:{MEMBERS_API_PORT}", flush=True)
+        print("  (Expose with a tunnel for live Mini App sync, or upload members.json)", flush=True)
+    except Exception as err:
+        print(f"Members API failed to start: {err}", flush=True)
     print("Polling for updates...", flush=True)
     print("Press Ctrl+C to stop.\n", flush=True)
 

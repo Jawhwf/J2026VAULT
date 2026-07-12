@@ -7,4 +7,7 @@ WEBAPP_URL = 'https://jawhwf.github.io/J2026VAULT/'
 
 BOT_LINK = 'https://t.me/J2026VaultBot'
 TELEGRAM_COMMUNITY = 'https://t.me/+wtjnU26GLDtkY2Ex'
-DISCORD_INVITE = 'https://discord.com/invite/J2026Vault'
+MEMBERS_API_HOST = '0.0.0.0'
+MEMBERS_API_PORT = 8765
+MEMBERS_API_PUBLIC_URL = ''
+
