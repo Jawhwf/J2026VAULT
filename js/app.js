@@ -2740,7 +2740,16 @@ function stopConfetti() {
 }
 
 function fireConfetti(opts = {}) {
-  const { count = 130, colors = ['#8b5cf6', '#a78bfa', '#6d40e0', '#cf9f45', '#e8e4ff', '#c4b5fd'] } = opts;
+  const cs = getComputedStyle(document.documentElement);
+  const accentColors = [
+    (cs.getPropertyValue('--accent') || '#8b5cf6').trim(),
+    (cs.getPropertyValue('--accent-bright') || '#a78bfa').trim(),
+    (cs.getPropertyValue('--accent-deep') || '#6d40e0').trim(),
+    '#cf9f45',
+    '#f2f2f5',
+    '#ffffff',
+  ];
+  const { count = 130, colors = accentColors } = opts;
   stopConfetti();
   const parent = celebrateOverlay;
   celebrateConfetti.width = parent.clientWidth;
