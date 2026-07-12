@@ -5260,9 +5260,6 @@ function writeLocalCatalogProducts(list, { quiet = false } = {}) {
     return true;
   } catch (err) {
     console.warn('catalog localStorage save failed', err);
-    if (!quiet) {
-      showToast('Catalog too large for this device — keep API/tunnel on and re-upload products.json');
-    }
     return false;
   }
 }
@@ -5307,7 +5304,7 @@ async function persistCatalogEverywhere(list, { quiet = false } = {}) {
   }
 
   if (!idbOk && !localOk && !quiet) {
-    showToast('Couldn’t cache catalog on this device — API save is required');
+    console.warn('catalog device cache unavailable');
   }
   return idbOk || localOk;
 }
@@ -5395,14 +5392,9 @@ async function saveCatalogProducts() {
 
   const cacheOk = await persistCatalogEverywhere(live, { quiet: true });
 
-  if (apiOk) return true;
-  if (cacheOk) {
-    if (canAccessVaultAdmin()) {
-      showToast('Saved on this device — start the bot/API so catalog syncs for everyone');
-    }
-    return true;
-  }
-  showToast('Couldn’t save catalog — restart the bot/API and try again');
+  if (apiOk || cacheOk) return true;
+  // Silent fail for sync noise — catalog still lives in memory this session
+  console.warn('catalog save failed (API + device cache)');
   return false;
 }
 
@@ -6983,6 +6975,7 @@ function toggleFavorite(id) {
     persistSeenCounts();
   }
   renderFavourites();
+  renderPurchases();
   filterProducts();
   renderBundles();
   if (currentProduct?.id === id && product) {
