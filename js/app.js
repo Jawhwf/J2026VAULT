@@ -3498,9 +3498,14 @@ function setEditorSystems(systems) {
 }
 
 function syncEditorVersionFields(source = editorVersion) {
-  const value = normalizeVersionInput(source?.value ?? editorDetailVersion?.value ?? '');
+  const value = stripVersionPrefix(source?.value ?? editorDetailVersion?.value ?? editorVersion?.value ?? '');
   if (editorVersion && editorVersion.value !== value) editorVersion.value = value;
-  if (editorDetailVersion && editorDetailVersion.value !== value) editorDetailVersion.value = value;
+  if (editorDetailVersion) {
+    const labeled = formatVersionLabel(value);
+    if (source !== editorDetailVersion && editorDetailVersion.value !== labeled) {
+      editorDetailVersion.value = labeled;
+    }
+  }
   syncEditorCompactInputWidths();
 }
 
@@ -3513,10 +3518,10 @@ function syncEditorCompactInputWidths() {
   };
   fit(editorPrice, { min: 3, max: 6, pad: 0 });
   fit(editorVersion, { min: 3, max: 8, pad: 0 });
-  fit(editorDetailVersion, { min: 3, max: 8, pad: 0 });
-  fit(editorWebsite, { min: 10, max: 18, pad: 0 });
+  fit(editorWebsite, { min: 10, max: 16, pad: 0 });
   fit(editorDownloads, { min: 2, max: 4, pad: 0 });
   fit(editorFavs, { min: 1, max: 3, pad: 0 });
+  if (editorDetailVersion) editorDetailVersion.style.removeProperty('width');
 }
 
 function closeEditorDetailOsPop() {
@@ -5229,6 +5234,10 @@ document.getElementById('editorTagsSuggestions')?.addEventListener('mousedown', 
 });
 
 editorDetailVersion?.addEventListener('input', () => syncEditorVersionFields(editorDetailVersion));
+editorDetailVersion?.addEventListener('blur', () => {
+  if (!editorDetailVersion) return;
+  editorDetailVersion.value = formatVersionLabel(stripVersionPrefix(editorDetailVersion.value));
+});
 editorVersion?.addEventListener('input', () => syncEditorVersionFields(editorVersion));
 
 editorFileSizeUnits?.querySelectorAll('.editor-size-chip').forEach(btn => {

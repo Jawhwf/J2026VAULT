@@ -5577,42 +5577,43 @@ body.plans-view .view.active > * {
 .editor-detail-editable:focus-within {
   background: rgba(255, 255, 255, 0.02);
 }
-/* Website + Version: same right edge as File size (text-align on block value) */
+/* Website + Version: match File size right edge exactly */
 #view-admin-editor .editor-flat .editor-details-live .editor-detail-website-row > .editor-detail-value,
 #view-admin-editor .editor-flat .editor-details-live .editor-detail-version-row > .editor-detail-value {
-  display: block !important;
   flex: 1 1 0 !important;
-  flex-wrap: nowrap !important;
   width: auto !important;
   max-width: 68% !important;
   min-width: 0 !important;
   margin: 0 !important;
   padding: 0 !important;
-  text-align: right !important;
-  line-height: 1.25;
+  gap: 0 !important;
+  box-sizing: border-box !important;
 }
-.editor-detail-website-link-wrap,
-.editor-detail-version-inner {
+#view-admin-editor .editor-flat .editor-details-live .editor-detail-website-row > .editor-detail-value {
+  display: flex !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+}
+#view-admin-editor .editor-flat .editor-details-live .editor-detail-version-row > .editor-detail-value {
+  display: block !important;
+  text-align: right !important;
+}
+.editor-detail-website-link-wrap {
   display: inline-flex !important;
   align-items: center;
   justify-content: flex-end;
-  flex: none !important;
+  flex: 0 0 auto !important;
   width: auto !important;
   max-width: 100%;
   min-width: 0;
   margin: 0 !important;
   padding: 0 !important;
   gap: 5px;
-  vertical-align: middle;
-  text-align: right;
-}
-.editor-detail-version-inner {
-  gap: 0;
 }
 .editor-detail-author-icon-btn {
-  flex: none !important;
+  flex: 0 0 auto !important;
   margin: 0 !important;
-  vertical-align: middle;
 }
 .editor-detail-author-clear {
   display: inline-flex;
@@ -5629,7 +5630,7 @@ body.plans-view .view.active > * {
   font-size: 16px;
   line-height: 1;
   cursor: pointer;
-  flex: none;
+  flex: 0 0 auto;
   transition: color 0.2s, background 0.2s;
 }
 .editor-detail-author-clear[hidden] {
@@ -5640,11 +5641,11 @@ body.plans-view .view.active > * {
   background: rgba(248, 113, 113, 0.12);
 }
 .editor-detail-website-input {
-  flex: none !important;
+  flex: 0 0 auto !important;
   field-sizing: content;
   width: auto !important;
   min-width: 0 !important;
-  max-width: 18ch !important;
+  max-width: 16ch !important;
   border: none !important;
   background: transparent !important;
   color: var(--accent-bright);
@@ -5675,65 +5676,34 @@ body.plans-view .view.active > * {
 }
 .editor-detail-website-arrow {
   color: var(--accent-bright);
-  flex: none;
+  flex: 0 0 auto;
   margin: 0 !important;
   display: block;
 }
-.editor-detail-plain-input {
-  min-width: 0;
-  max-width: 100%;
-  border: 1px dashed transparent;
-  background: transparent;
-  color: var(--text-muted);
-  font-family: var(--font);
-  font-size: 14px;
-  font-weight: 500;
-  text-align: right;
-  padding: 4px 6px;
-  border-radius: 6px;
-  transition: border-color 0.2s, background 0.2s;
-}
-.editor-detail-plain-input:hover,
-.editor-detail-plain-input:focus {
-  border-color: var(--accent-line);
-  background: var(--surface-3);
-  outline: none;
-}
-.editor-detail-version-prefix {
-  color: var(--text-muted);
-  font-size: 14px;
-  font-weight: 500;
-  line-height: 1.25;
-  flex: none !important;
-  margin: 0 !important;
-  padding: 0 !important;
-}
 .editor-detail-version-input {
-  flex: none !important;
-  field-sizing: content;
-  width: auto !important;
+  display: block !important;
+  width: 100% !important;
+  max-width: none !important;
   min-width: 0 !important;
-  max-width: 10ch !important;
   border: none !important;
   background: transparent !important;
   color: var(--text-muted);
   font-family: var(--font);
   font-size: 14px;
   font-weight: 500;
-  text-align: left;
+  line-height: 1.25;
+  text-align: right !important;
   padding: 0 !important;
   margin: 0 !important;
   border-radius: 0;
-  line-height: 1.25;
+  box-sizing: border-box !important;
+  field-sizing: fixed;
 }
 .editor-detail-version-input:hover,
 .editor-detail-version-input:focus {
   outline: none;
   color: var(--text);
   background: transparent;
-}
-.editor-detail-version-inner:focus-within {
-  box-shadow: 0 1px 0 var(--accent-line);
 }
 .editor-detail-tags-value {
   display: flex;
