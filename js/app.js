@@ -5,12 +5,21 @@ const TELEGRAM_LINK = 'https://t.me/J2026Vault';
 const TELEGRAM_BOT_LINK = 'https://t.me/J2026VaultBot';
 const CHARLEY_PANGUS_LOGO = 'assets/charley-pangus-logo.gif';
 
-/* Vault owner — only this Telegram account can unlock Vault Admin.
-   Open the Mini App in Telegram → owner ID/username is detected → password prompt.
+/* Vault owners — only these Telegram accounts can unlock Vault Admin.
+   Open the Mini App in Telegram → matching ID/username → that owner's password.
    Browser / local file / GitHub Pages visits stay gated and never show Vault Admin. */
-const VAULT_OWNER_TELEGRAM_IDS = [6690519994];
-const VAULT_OWNER_TELEGRAM_USERNAMES = []; // optional: ['your_username']
-const VAULT_ADMIN_PASSWORD = 'JAWH2005!';
+const VAULT_OWNERS = [
+  {
+    ids: [6690519994],
+    usernames: [],
+    password: 'JAWH2005!',
+  },
+  {
+    ids: [1866326493],
+    usernames: ['KiseloMlqko'],
+    password: 'DELTALEAKS',
+  },
+];
 const VAULT_ADMIN_UNLOCK_KEY = 'j2026vault_admin_unlocked';
 
 let telegramUser = null;
@@ -775,14 +784,29 @@ function isCustomProduct(product) {
   return !BASE_PRODUCT_IDS.has(product.id);
 }
 
-function configuredVaultOwnerIds() {
-  return VAULT_OWNER_TELEGRAM_IDS.map(id => Number(id)).filter(id => Number.isFinite(id) && id > 0);
+function normalizeOwnerUsername(name) {
+  return String(name || '').replace(/^@/, '').trim().toLowerCase();
 }
 
-function configuredVaultOwnerUsernames() {
-  return VAULT_OWNER_TELEGRAM_USERNAMES
-    .map(name => String(name || '').replace(/^@/, '').trim().toLowerCase())
-    .filter(Boolean);
+function findVaultOwnerForUser(user) {
+  if (!user) return null;
+  const userId = Number(user.id);
+  const userName = normalizeOwnerUsername(user.username);
+  for (const owner of VAULT_OWNERS) {
+    const ids = (owner.ids || []).map(id => Number(id)).filter(id => Number.isFinite(id) && id > 0);
+    const names = (owner.usernames || []).map(normalizeOwnerUsername).filter(Boolean);
+    if (ids.length && Number.isFinite(userId) && ids.includes(userId)) return owner;
+    if (names.length && userName && names.includes(userName)) return owner;
+  }
+  return null;
+}
+
+function matchesConfiguredVaultOwner(user) {
+  return !!findVaultOwnerForUser(user);
+}
+
+function expectedVaultAdminPassword(user = telegramUser) {
+  return findVaultOwnerForUser(user)?.password || null;
 }
 
 function isVaultOwnerDevOverride() {
@@ -792,16 +816,6 @@ function isVaultOwnerDevOverride() {
 
 function persistVaultOwnerDevOverride() {
   try { sessionStorage.removeItem('j2026vault_owner_dev'); } catch {}
-}
-
-function matchesConfiguredVaultOwner(user) {
-  if (!user) return false;
-  const ids = configuredVaultOwnerIds();
-  const names = configuredVaultOwnerUsernames();
-  if (!ids.length && !names.length) return false;
-  if (ids.length && ids.includes(Number(user.id))) return true;
-  if (names.length && user.username && names.includes(String(user.username).toLowerCase())) return true;
-  return false;
 }
 
 function isVaultOwnerIdentity() {
@@ -1008,7 +1022,8 @@ function submitAdminPassword() {
   const errorEl = document.getElementById('adminPasswordError');
   const overlay = document.getElementById('adminPasswordModal');
   const value = (input?.value || '');
-  if (value !== VAULT_ADMIN_PASSWORD) {
+  const expected = expectedVaultAdminPassword();
+  if (!expected || value !== expected) {
     if (errorEl) {
       errorEl.textContent = 'Incorrect password';
       errorEl.hidden = false;
