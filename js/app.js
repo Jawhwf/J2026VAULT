@@ -17,7 +17,7 @@ const VAULT_OWNERS = [
   },
   {
     ids: [1866326493],
-    usernames: ['KiseloMlqko'],
+    usernames: ['KiseloMlqko', 'Yogurt'],
     password: 'DELTALEAKS',
   },
 ];
@@ -1511,6 +1511,48 @@ function setProfileEditorPlan(planKey) {
   if (daysWrap) daysWrap.hidden = plan !== 'ACOLYTE';
 }
 
+let peDraftAvatarDataUrl = null;
+
+function setProfileEditorAvatarPreview(src, { showClear = false } = {}) {
+  const img = document.getElementById('peAvatarPreview');
+  const clearBtn = document.getElementById('peAvatarClear');
+  if (img) img.src = src || 'assets/pfp.png';
+  if (clearBtn) clearBtn.hidden = !showClear;
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(reader.error || new Error('read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function compressImageFileToDataUrl(file, maxSide = 256, quality = 0.82) {
+  const dataUrl = await readFileAsDataUrl(file);
+  return await new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const w = Math.max(1, Math.round(img.width * scale));
+      const h = Math.max(1, Math.round(img.height * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      try {
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } catch {
+        resolve(dataUrl);
+      }
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
 function renderProfileEditorList() {
   const listEl = document.getElementById('profileEditorList');
   const emptyEl = document.getElementById('profileEditorEmpty');
@@ -1563,13 +1605,30 @@ function openProfileEditorSheet(memberId = null) {
   const eyebrow = document.getElementById('profileEditorSheetEyebrow');
   const title = document.getElementById('profileEditorSheetTitle');
   if (eyebrow) eyebrow.textContent = member ? (member.username ? `@${member.username}` : `ID ${member.id}`) : 'New member';
-  if (title) title.textContent = member ? 'Set subscription' : 'Add Telegram ID';
+  if (title) title.textContent = member ? 'Edit profile' : 'Add Telegram ID';
 
   const idInput = document.getElementById('peTelegramId');
   if (idInput) {
     idInput.value = member?.id ?? '';
     idInput.disabled = !!member;
   }
+
+  const usernameInput = document.getElementById('peUsername');
+  if (usernameInput) usernameInput.value = member?.username || '';
+  const nameInput = document.getElementById('peName');
+  if (nameInput) nameInput.value = member?.name || '';
+  const joinedInput = document.getElementById('peRegisteredAt');
+  if (joinedInput) joinedInput.value = member?.registeredAt || formatRegisteredLabel(new Date());
+  const downloadsInput = document.getElementById('peDownloads');
+  if (downloadsInput) downloadsInput.value = String(member?.downloads ?? 0);
+  const purchasesInput = document.getElementById('pePurchases');
+  if (purchasesInput) purchasesInput.value = String(member?.purchases ?? 0);
+
+  peDraftAvatarDataUrl = member?.avatarDataUrl || null;
+  const preview = peDraftAvatarDataUrl || member?.photoUrl || 'assets/pfp.png';
+  setProfileEditorAvatarPreview(preview, { showClear: !!(peDraftAvatarDataUrl || member?.photoUrl) });
+  const fileInput = document.getElementById('peAvatarFile');
+  if (fileInput) fileInput.value = '';
 
   const plan = member?.plan || 'MORTAL';
   setProfileEditorPlan(plan);
@@ -1588,6 +1647,7 @@ function closeProfileEditorSheet() {
   const sheet = document.getElementById('profileEditorSheet');
   if (sheet) sheet.hidden = true;
   editingMemberId = null;
+  peDraftAvatarDataUrl = null;
 }
 
 async function saveProfileEditorMember() {
@@ -1608,16 +1668,42 @@ async function saveProfileEditorMember() {
     endsAt = null;
   }
 
+  const username = String(document.getElementById('peUsername')?.value || '').replace(/^@/, '').trim();
+  const name = String(document.getElementById('peName')?.value || '').trim() || (username ? `@${username}` : `User ${idVal}`);
+  let registeredAt = String(document.getElementById('peRegisteredAt')?.value || '').trim();
+  if (!parseRegisteredLabel(registeredAt)) {
+    registeredAt = prev.registeredAt || formatRegisteredLabel(new Date());
+  } else {
+    registeredAt = parseRegisteredLabel(registeredAt);
+  }
+  const downloads = Math.max(0, Number(document.getElementById('peDownloads')?.value) || 0);
+  const purchases = Math.max(0, Number(document.getElementById('pePurchases')?.value) || 0);
+
+  let avatarDataUrl = peDraftAvatarDataUrl;
+  let photoUrl = String(prev.photoUrl || '');
+  if (avatarDataUrl === '') {
+    avatarDataUrl = null;
+    photoUrl = '';
+  } else if (avatarDataUrl) {
+    photoUrl = '';
+  } else {
+    avatarDataUrl = prev.avatarDataUrl || null;
+  }
+
   const member = normalizeMemberRecord({
     ...prev,
     id: idVal,
-    name: prev.name || `User ${idVal}`,
-    username: prev.username || '',
-    registeredAt: prev.registeredAt || formatRegisteredLabel(new Date()),
-    downloads: prev.downloads ?? 0,
-    purchases: prev.purchases ?? 0,
+    name,
+    username,
+    registeredAt,
+    downloads,
+    purchases,
     plan,
     endsAt,
+    avatarDataUrl: avatarDataUrl || null,
+    photoUrl: avatarDataUrl ? '' : photoUrl,
+    sources: Array.from(new Set([...(prev.sources || []), 'editor'])),
+    firstSource: prev.firstSource || 'editor',
   });
 
   upsertMemberInCache(member);
@@ -1628,15 +1714,18 @@ async function saveProfileEditorMember() {
   }
 
   try {
+    await resolveMembersApiUrl();
     if (readMembersApiUrl()) {
       await membersApiFetch(`/api/members/${member.id}`, { method: 'PUT', body: member });
       await refreshMembersList();
     }
-  } catch {}
+  } catch (e) {
+    if (err) { err.textContent = e?.message || 'Saved locally — API sync failed'; err.hidden = false; }
+  }
 
   closeProfileEditorSheet();
   renderProfileEditorList();
-  showToast(`${planLabel(member.plan)} saved`);
+  showToast(`${planLabel(member.plan)} · ${member.name} saved`);
 }
 
 async function deleteProfileEditorMember() {
@@ -5227,6 +5316,25 @@ document.getElementById('profileEditorAddBtn')?.addEventListener('click', () => 
 document.getElementById('profileEditorSheetClose')?.addEventListener('click', () => closeProfileEditorSheet());
 document.getElementById('peSaveBtn')?.addEventListener('click', () => saveProfileEditorMember());
 document.getElementById('peDeleteBtn')?.addEventListener('click', () => deleteProfileEditorMember());
+document.getElementById('peAvatarBtn')?.addEventListener('click', () => {
+  document.getElementById('peAvatarFile')?.click();
+});
+document.getElementById('peAvatarFile')?.addEventListener('change', async (e) => {
+  const file = e.target?.files?.[0];
+  if (!file) return;
+  try {
+    peDraftAvatarDataUrl = await compressImageFileToDataUrl(file);
+    setProfileEditorAvatarPreview(peDraftAvatarDataUrl, { showClear: true });
+  } catch {
+    showToast('Could not read image');
+  }
+});
+document.getElementById('peAvatarClear')?.addEventListener('click', () => {
+  peDraftAvatarDataUrl = '';
+  setProfileEditorAvatarPreview('assets/pfp.png', { showClear: false });
+  const fileInput = document.getElementById('peAvatarFile');
+  if (fileInput) fileInput.value = '';
+});
 document.querySelectorAll('#pePlanPicker .pe-plan-chip').forEach(btn => {
   btn.addEventListener('click', () => setProfileEditorPlan(btn.dataset.plan));
 });
