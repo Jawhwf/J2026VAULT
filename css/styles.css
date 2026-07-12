@@ -933,7 +933,23 @@ img[src*="crown-lurker"] {
   padding: 4px 8px; border-radius: 999px;
   background: rgba(8,8,11,0.6); font-size: 11px; color: var(--text);
   backdrop-filter: blur(4px);
+  transform-origin: center;
 }
+.stat-pill-downloads.is-bump,
+.meta-pill.is-bump {
+  animation: downloadStatBump 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes downloadStatBump {
+  0% { transform: scale(1); }
+  28% {
+    transform: scale(1.22);
+    background: var(--accent-soft);
+    color: var(--accent-bright);
+    box-shadow: 0 0 0 1px var(--accent-line);
+  }
+  100% { transform: scale(1); }
+}
+.stat-pill-value { font-variant-numeric: tabular-nums; }
 
 .card-body { padding: 13px 15px 15px; position: relative; z-index: 2; }
 .card-title { font-size: 14px; font-weight: 700; line-height: 1.25; margin-bottom: 0; transition: color 0.2s; }

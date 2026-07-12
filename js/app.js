@@ -2232,10 +2232,42 @@ function guardVaultAdminAccess(viewName) {
   return false;
 }
 
-/* products the user "owns" (bought or free) — enables Download */
+/* products the user owns (bought or downloaded) — also listed under Purchases */
 const owned = new Set();
 const favorites = new Set();
 const library = new Set();
+const LIBRARY_STORAGE_KEY = 'j2026vault_library_ids';
+const OWNED_STORAGE_KEY = 'j2026vault_owned_ids';
+
+function readIdSet(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.map(Number).filter(n => Number.isFinite(n)) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeIdSet(key, set) {
+  try {
+    localStorage.setItem(key, JSON.stringify([...set]));
+  } catch {}
+}
+
+function loadOwnedLibrary() {
+  readIdSet(LIBRARY_STORAGE_KEY).forEach(id => library.add(id));
+  readIdSet(OWNED_STORAGE_KEY).forEach(id => owned.add(id));
+  // Purchases tab uses library — keep owned mirrored there too
+  owned.forEach(id => library.add(id));
+}
+
+function persistOwnedLibrary() {
+  writeIdSet(LIBRARY_STORAGE_KEY, library);
+  writeIdSet(OWNED_STORAGE_KEY, owned);
+}
+
 let subscribed = false;
 let currentProduct = null;
 let editingProductId = null;
@@ -2779,18 +2811,94 @@ function updateNavBadges() {
   }
 }
 
+function parseDownloadCount(raw) {
+  const m = String(raw ?? '0').replace(/,/g, '').match(/(\d+(?:\.\d+)?)\s*([kKmM])?/);
+  if (!m) return 0;
+  let n = Number(m[1]) || 0;
+  const suffix = (m[2] || '').toLowerCase();
+  if (suffix === 'k') n *= 1000;
+  if (suffix === 'm') n *= 1000000;
+  return Math.max(0, Math.floor(n));
+}
+
+function formatDownloadCount(n) {
+  const count = Math.max(0, Number(n) || 0);
+  if (count >= 1000000) return `${(count / 1000000).toFixed(count >= 10000000 ? 0 : 1).replace(/\.0$/, '')}M+`;
+  if (count >= 1000) return `${(count / 1000).toFixed(count >= 10000 ? 0 : 1).replace(/\.0$/, '')}k+`;
+  return `${count}+`;
+}
+
+function bumpProductDownloadCount(product) {
+  if (!product) return '0+';
+  const next = formatDownloadCount(parseDownloadCount(product.downloads) + 1);
+  product.downloads = next;
+  const idx = PRODUCTS.findIndex(p => Number(p.id) === Number(product.id));
+  if (idx >= 0) PRODUCTS[idx].downloads = next;
+  return next;
+}
+
+function paintDownloadCount(productId, label) {
+  const id = Number(productId);
+  document.querySelectorAll(`.product-card[data-id="${id}"] [data-stat="downloads"]`).forEach(pill => {
+    const value = pill.querySelector('.stat-pill-value');
+    if (value) value.textContent = label;
+    else {
+      const svg = pill.querySelector('svg');
+      pill.innerHTML = `${svg ? svg.outerHTML : ''} <span class="stat-pill-value">${label}</span>`;
+    }
+    pill.classList.remove('is-bump');
+    void pill.offsetWidth;
+    pill.classList.add('is-bump');
+  });
+  const detail = document.getElementById('productDownloads');
+  if (detail && currentProduct && Number(currentProduct.id) === id) {
+    detail.textContent = label;
+    const wrap = document.getElementById('productDownloadsPill') || detail.closest('.meta-pill') || detail;
+    wrap.classList.remove('is-bump');
+    void wrap.offsetWidth;
+    wrap.classList.add('is-bump');
+  }
+}
+
+function grantProductOwnership(product, { countPurchase = true } = {}) {
+  if (!product?.id && product?.id !== 0) return false;
+  const id = product.id;
+  const wasNew = !library.has(id) && !owned.has(id);
+  library.add(id);
+  owned.add(id);
+  persistOwnedLibrary();
+  if (wasNew && countPurchase) {
+    userStats.purchases++;
+    updateProfileStats();
+    persistOwnProfileFromUi();
+    heartbeatOwnProfile();
+  }
+  renderPurchases();
+  updateNavBadges();
+  return wasNew;
+}
+
 function startDownload(product) {
+  if (!product) return;
+
+  // Public card counter
+  const nextLabel = bumpProductDownloadCount(product);
+  saveCatalogProducts().catch(() => {});
+
+  // Profile download tally (every click)
   userStats.downloads++;
+  // First unlock counts as a purchase/owned item (Heavenly free download included)
+  grantProductOwnership(product, { countPurchase: true });
   updateProfileStats();
   persistOwnProfileFromUi();
   heartbeatOwnProfile();
-  const wasNew = !library.has(product.id);
-  library.add(product.id);
-  renderPurchases();
-  if (wasNew) {
-    filterProducts();
-    renderBundles();
-  }
+
+  // Refresh catalog cards in place — owned items stay listed
+  filterProducts();
+  renderBundles();
+  // Animate after re-render so the bump isn't wiped
+  requestAnimationFrame(() => paintDownloadCount(product.id, nextLabel));
+
   const openedDrive = openProductDownload(product);
   showDownloadCelebration(product, openedDrive);
 }
@@ -3140,6 +3248,7 @@ function deleteCatalogProduct(id) {
   favorites.delete(id);
   library.delete(id);
   owned.delete(id);
+  persistOwnedLibrary();
   saveCatalogProducts();
 
   if (currentProduct?.id === id) {
@@ -5011,7 +5120,8 @@ function editCatalogProduct(id) {
 }
 
 function catalogProducts() {
-  return PRODUCTS.filter(p => !library.has(p.id));
+  // Keep owned/downloaded items in the catalog — Purchases is a separate view
+  return PRODUCTS.filter(p => p && !isExampleProduct(p));
 }
 
 function getNextProductId() {
@@ -6663,7 +6773,7 @@ function renderCard(product, isBundle = false, context = 'catalog') {
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
       </button>
       <div class="card-stats">
-        <span class="stat-pill"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ${product.downloads}</span>
+        <span class="stat-pill stat-pill-downloads" data-stat="downloads"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> <span class="stat-pill-value">${product.downloads}</span></span>
         <button type="button" class="stat-pill stat-pill-fav${favorites.has(product.id) ? ' is-faved' : ''}" aria-label="Favourite" aria-pressed="${favorites.has(product.id)}" onclick="event.stopPropagation(); toggleFavorite(${product.id})">
           <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> ${product.favs}
         </button>
@@ -6752,7 +6862,7 @@ function renderProducts(list) {
 }
 
 function renderBundles() {
-  const available = PRODUCTS.filter(p => p.type === 'bundle' && !library.has(p.id));
+  const available = PRODUCTS.filter(p => p.type === 'bundle' && !isExampleProduct(p));
   bundleList.innerHTML = '';
   available.forEach(p => bundleList.appendChild(renderCard(p)));
   initBundleLottie(bundleList);
@@ -6938,10 +7048,10 @@ function refreshBuyButton(product) {
 }
 
 function renderPurchases() {
-  const list = PRODUCTS.filter(p => library.has(p.id));
+  const list = PRODUCTS.filter(p => library.has(p.id) || owned.has(p.id));
   purchasesGrid.innerHTML = '';
   purchasesEmpty.style.display = list.length ? 'none' : '';
-  list.forEach(p => purchasesGrid.appendChild(renderCard(p)));
+  list.forEach(p => purchasesGrid.appendChild(renderCard(p, false, 'purchases')));
   initBundleLottie(purchasesGrid);
   updateNavBadges();
 }
@@ -7332,6 +7442,7 @@ async function initApp() {
   }
 
   applyVaultAdminAccess();
+  loadOwnedLibrary();
   await loadCatalogProducts();
   loadProfileName();
   initAccentThemePicker();
@@ -7340,7 +7451,13 @@ async function initApp() {
   // (heartbeat re-fetches Telegram PFP unless a custom Mini App upload is locked)
   Promise.resolve()
     .then(() => ensureOwnProfileLoaded())
-    .then(() => heartbeatOwnProfile())
+    .then(() => {
+      // Keep purchase tally at least as high as owned library size
+      userStats.purchases = Math.max(userStats.purchases || 0, library.size);
+      updateProfileStats();
+      renderPurchases();
+      return heartbeatOwnProfile();
+    })
     .catch(() => {});
 
   updateProfileStats();
