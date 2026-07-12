@@ -6,12 +6,12 @@ const TELEGRAM_BOT_LINK = 'https://t.me/J2026VaultBot';
 const CHARLEY_PANGUS_LOGO = 'assets/charley-pangus-logo.gif';
 
 /* Vault owners — ONLY these two Telegram accounts can see / unlock Vault Admin.
-   Match is by Telegram user id OR username (case-insensitive). Everyone else:
-   no button, no password popup, no admin views, no toast. */
+   Everyone else still gets Profile + the full Mini App; Vault Admin stays hidden.
+   Match is by Telegram user id OR @username from Telegram (not the editable profile name). */
 const VAULT_OWNERS = [
   {
     ids: [6690519994],
-    usernames: [],
+    usernames: ['J2026Vault'],
     password: 'JAWH2005!',
   },
   {
