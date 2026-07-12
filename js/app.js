@@ -730,6 +730,7 @@ function normalizeDeliveryLinks(productOrLinks) {
 }
 
 const CATALOG_STORAGE_KEY = 'j2026vault_catalog_products';
+const PRODUCTS_JSON_URL = 'products.json';
 const BASE_PRODUCT_IDS = new Set(BASE_PRODUCTS.map(p => p.id));
 let PRODUCTS = [...BASE_PRODUCTS];
 
@@ -3993,17 +3994,29 @@ function importCoverFile(file) {
     showToast('Please use an image or GIF');
     return;
   }
-  if (file.size > 4 * 1024 * 1024) {
-    showToast('Cover file is too large (max 4MB)');
+  if (file.size > 6 * 1024 * 1024) {
+    showToast('Cover file is too large (max 6MB)');
     return;
   }
-  const reader = new FileReader();
-  reader.onload = () => {
-    setEditorCoverImage(reader.result);
+  const keepGif = file.type === 'image/gif' && file.size <= 1.5 * 1024 * 1024;
+  const apply = (dataUrl) => {
+    setEditorCoverImage(dataUrl);
     updateEditorPreview();
     showToast('Cover imported');
   };
-  reader.readAsDataURL(file);
+  if (keepGif) {
+    const reader = new FileReader();
+    reader.onload = () => apply(reader.result);
+    reader.readAsDataURL(file);
+    return;
+  }
+  compressImageFileToDataUrl(file, 1280, 0.82)
+    .then(apply)
+    .catch(() => {
+      const reader = new FileReader();
+      reader.onload = () => apply(reader.result);
+      reader.readAsDataURL(file);
+    });
 }
 
 function setEditorType(type) {
@@ -4790,31 +4803,99 @@ function getNextProductId() {
   return PRODUCTS.reduce((max, p) => Math.max(max, Number(p.id) || 0), 0) + 1;
 }
 
-function saveCatalogProducts() {
-  try {
-    const live = PRODUCTS.filter(p => !isExampleProduct(p));
-    PRODUCTS = live;
-    localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(live));
-  } catch {}
+function normalizeCatalogList(raw) {
+  if (Array.isArray(raw)) return raw.filter(p => p && !isExampleProduct(p));
+  if (raw && Array.isArray(raw.products)) return raw.products.filter(p => p && !isExampleProduct(p));
+  return [];
 }
 
-function loadCatalogProducts() {
+function readLocalCatalogProducts() {
   try {
     const raw = localStorage.getItem(CATALOG_STORAGE_KEY);
-    if (!raw) {
-      PRODUCTS = [];
-      return;
-    }
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      PRODUCTS = [];
-      return;
-    }
-    PRODUCTS = parsed.filter(p => p && !isExampleProduct(p));
-    localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(PRODUCTS));
+    if (!raw) return [];
+    return normalizeCatalogList(JSON.parse(raw));
   } catch {
-    PRODUCTS = [];
+    return [];
   }
+}
+
+function writeLocalCatalogProducts(list) {
+  const live = normalizeCatalogList(list);
+  try {
+    localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(live));
+    return true;
+  } catch (err) {
+    console.warn('catalog localStorage save failed', err);
+    showToast('Catalog too large for this device — keep API/tunnel on and re-upload products.json');
+    return false;
+  }
+}
+
+async function fetchCatalogJsonFile() {
+  const res = await fetch(`${PRODUCTS_JSON_URL}?t=${Date.now()}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('products.json missing');
+  return normalizeCatalogList(await res.json());
+}
+
+async function fetchCatalogFromApi() {
+  const base = readMembersApiUrl();
+  if (!base) return null;
+  const res = await fetch(`${base}/api/catalog?t=${Date.now()}`, { cache: 'no-store' });
+  if (!res.ok) throw new Error('catalog API failed');
+  const data = await res.json();
+  if (!data?.ok) throw new Error(data?.error || 'catalog API error');
+  return normalizeCatalogList(data);
+}
+
+function pickPreferredCatalog(localList, remoteList) {
+  const local = normalizeCatalogList(localList);
+  const remote = normalizeCatalogList(remoteList);
+  if (!remote.length) return local;
+  if (!local.length) return remote;
+  // Prefer the longer / newer remote catalog so every Mini App user sees owner posts
+  const localMax = local.reduce((m, p) => Math.max(m, Date.parse(p.updatedAt || p.createdAt || '') || 0, Number(p.id) || 0), 0);
+  const remoteMax = remote.reduce((m, p) => Math.max(m, Date.parse(p.updatedAt || p.createdAt || '') || 0, Number(p.id) || 0), 0);
+  if (remote.length >= local.length || remoteMax >= localMax) return remote;
+  return local;
+}
+
+async function saveCatalogProducts() {
+  const live = PRODUCTS.filter(p => !isExampleProduct(p)).map(p => ({
+    ...p,
+    updatedAt: p.updatedAt || p.createdAt || new Date().toISOString(),
+  }));
+  PRODUCTS = live;
+  const localOk = writeLocalCatalogProducts(live);
+
+  try {
+    await resolveMembersApiUrl();
+    if (readMembersApiUrl() && canAccessVaultAdmin()) {
+      await membersApiFetch('/api/catalog', { method: 'PUT', body: { products: live } });
+      return true;
+    }
+  } catch (err) {
+    console.warn('catalog API save failed', err);
+    if (canAccessVaultAdmin()) {
+      showToast('Saved on this device — start the bot/API so catalog syncs for everyone');
+    }
+  }
+  return localOk;
+}
+
+async function loadCatalogProducts() {
+  let remote = [];
+  try {
+    remote = await fetchCatalogJsonFile();
+  } catch {}
+  try {
+    await resolveMembersApiUrl();
+    const apiList = await fetchCatalogFromApi();
+    if (apiList?.length) remote = apiList;
+  } catch {}
+
+  const local = readLocalCatalogProducts();
+  PRODUCTS = pickPreferredCatalog(local, remote);
+  writeLocalCatalogProducts(PRODUCTS);
 }
 
 function syncCatalogUI() {
@@ -4882,13 +4963,15 @@ function buildProductFromForm() {
   const aboutOn = isEditorAboutOn();
   const statsOn = editorStatsOn?.checked !== false;
   const existing = editingProductId ? PRODUCTS.find(p => p.id === editingProductId) : null;
+  const now = new Date().toISOString();
   return {
     id: existing?.id ?? getNextProductId(),
     ...draft,
     title,
     thumb: draft.coverImage ? '' : (draft.thumb || 'thumb-1'),
     favs: statsOn ? Math.max(0, Number(editorFavs?.value) || 0) : (existing?.favs ?? 0),
-    createdAt: existing?.createdAt ?? new Date().toISOString(),
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
     tags: detailsOn ? (draft.tags.length ? draft.tags : ['custom']) : [],
     systems: detailsOn ? draft.systems : [],
     delivery: detailsOn ? draft.delivery : [],
@@ -5598,18 +5681,47 @@ document.getElementById('productFavPill')?.addEventListener('click', () => {
 
 /* ── Payment method sheet ── */
 const paymentModal = document.getElementById('paymentModal');
-let pendingPlan = null;
+let pendingPayment = null;
 
-function openPaymentModal(plan, price) {
-  pendingPlan = { plan, price };
-  document.getElementById('paySummaryPlan').textContent = PLAN_DISPLAY[plan]?.name || plan;
-  document.getElementById('paySummaryPrice').textContent = `$${price}`;
+function openPaymentModal(planOrOpts, priceMaybe) {
+  const opts = typeof planOrOpts === 'object' && planOrOpts
+    ? planOrOpts
+    : { kind: 'plan', plan: planOrOpts, price: priceMaybe };
+
+  pendingPayment = {
+    kind: opts.kind === 'product' ? 'product' : 'plan',
+    plan: opts.plan || null,
+    productId: opts.productId ?? null,
+    title: opts.title || '',
+    price: opts.price,
+  };
+
+  const labelEl = document.getElementById('paySummaryLabel');
+  const planEl = document.getElementById('paySummaryPlan');
+  const priceEl = document.getElementById('paySummaryPrice');
+  const prefixEl = document.getElementById('paySummaryPricePrefix');
   const paySummaryCrown = document.getElementById('paySummaryCrown');
-  const crownSrc = PLAN_DISPLAY[plan]?.crown || PLAN_CROWNS[plan];
-  if (paySummaryCrown && crownSrc) {
-    paySummaryCrown.src = crownSrc;
-    applyCrownClass(paySummaryCrown, plan, 'pay-summary-crown');
+  const crownWrap = paySummaryCrown?.closest('.pay-summary-crown-wrap');
+
+  if (pendingPayment.kind === 'product') {
+    if (labelEl) labelEl.textContent = 'CATALOG ITEM';
+    if (planEl) planEl.textContent = pendingPayment.title || 'Product';
+    if (prefixEl) prefixEl.textContent = 'Item price:';
+    if (priceEl) priceEl.textContent = `$${Number(pendingPayment.price || 0).toFixed(2)}`;
+    if (crownWrap) crownWrap.hidden = true;
+  } else {
+    if (labelEl) labelEl.textContent = 'SUBSCRIPTION';
+    if (planEl) planEl.textContent = PLAN_DISPLAY[pendingPayment.plan]?.name || pendingPayment.plan;
+    if (prefixEl) prefixEl.textContent = 'Plan price:';
+    if (priceEl) priceEl.textContent = `$${pendingPayment.price}`;
+    if (crownWrap) crownWrap.hidden = false;
+    const crownSrc = PLAN_DISPLAY[pendingPayment.plan]?.crown || PLAN_CROWNS[pendingPayment.plan];
+    if (paySummaryCrown && crownSrc) {
+      paySummaryCrown.src = crownSrc;
+      applyCrownClass(paySummaryCrown, pendingPayment.plan, 'pay-summary-crown');
+    }
   }
+
   paymentModal.classList.add('open');
   paymentModal.setAttribute('aria-hidden', 'false');
 }
@@ -5620,7 +5732,11 @@ function closePaymentModal() {
 }
 
 document.querySelectorAll('.btn-getplan').forEach(btn => {
-  btn.addEventListener('click', () => openPaymentModal(btn.dataset.plan, btn.dataset.price));
+  btn.addEventListener('click', () => openPaymentModal({
+    kind: 'plan',
+    plan: btn.dataset.plan,
+    price: btn.dataset.price,
+  }));
 });
 
 document.getElementById('payCloseBtn').addEventListener('click', closePaymentModal);
@@ -5714,13 +5830,16 @@ function openScanPayQrModal(method) {
   const config = SCAN_PAY_METHODS[method];
   if (!config) return;
 
-  const plan = pendingPlan?.plan;
-  const price = pendingPlan?.price;
-  const planLabel = PLAN_DISPLAY[plan]?.name || plan || 'Plan';
+  const isProduct = pendingPayment?.kind === 'product';
+  const plan = pendingPayment?.plan;
+  const price = pendingPayment?.price;
+  const planLabel = isProduct
+    ? (pendingPayment?.title || 'Catalog item')
+    : (PLAN_DISPLAY[plan]?.name || plan || 'Plan');
   const planEl = document.getElementById('scanPayQrPlan');
   if (planEl) {
     planEl.textContent = price != null
-      ? `${planLabel} · $${price}`
+      ? `${planLabel} · $${Number(price).toFixed ? Number(price).toFixed(2) : price}`
       : planLabel;
   }
 
@@ -5737,7 +5856,13 @@ function openScanPayQrModal(method) {
   const themeClasses = ['is-paypal', 'is-zelle', 'is-bitcoin', 'is-card'];
   const addressOnly = !!config.addressOnly;
   const stripeOnly = !!config.stripe;
-  const stripeUrl = stripeOnly ? getStripeCheckoutUrl(plan) : null;
+  const stripeUrl = stripeOnly && !isProduct ? getStripeCheckoutUrl(plan) : null;
+  // Catalog buys have no Stripe plan link — show Cash App QR for card methods
+  const productCardFallback = stripeOnly && isProduct;
+  const qrSrc = productCardFallback
+    ? SCAN_PAY_METHODS.cashapp.qr
+    : config.qr;
+  const showQrFrame = !addressOnly && !!(qrSrc) && (!stripeOnly || productCardFallback);
 
   if (brandIcon) brandIcon.src = config.icon;
   if (eyebrow) {
@@ -5748,40 +5873,48 @@ function openScanPayQrModal(method) {
     if (config.theme === 'bitcoin') eyebrow.classList.add('is-bitcoin');
     if (config.theme === 'card') eyebrow.classList.add('is-card');
   }
-  if (title) title.textContent = config.title || 'Scan to pay';
+  if (title) {
+    title.textContent = productCardFallback
+      ? 'Scan to pay'
+      : (config.title || 'Scan to pay');
+  }
   if (sub) {
-    if (stripeOnly && plan === 'ACOLYTE') {
+    if (productCardFallback) {
+      sub.textContent = 'Pay this catalog item with Cash App (card OK in Cash App), then DM staff and the owner with a screenshot of proof.';
+    } else if (stripeOnly && plan === 'ACOLYTE') {
       sub.textContent = 'Continue to Stripe for the $5/month Leaker plan. After paying, DM staff and the owner with a screenshot of proof.';
     } else if (stripeOnly && plan === 'ETERNAL') {
       sub.textContent = 'Continue to Stripe for the $100 one-time HEAVENLY plan. After paying, DM staff and the owner with a screenshot of proof.';
+    } else if (isProduct && !stripeOnly) {
+      sub.textContent = `${config.sub || 'Complete your payment.'} After paying, DM staff and the owner with proof to unlock this item.`;
     } else {
       sub.textContent = config.sub;
     }
   }
   if (frame) {
     themeClasses.forEach(c => frame.classList.remove(c));
-    if (config.theme === 'paypal') frame.classList.add('is-paypal');
+    if (!productCardFallback && config.theme === 'paypal') frame.classList.add('is-paypal');
     if (config.theme === 'zelle') frame.classList.add('is-zelle');
     if (config.theme === 'bitcoin') frame.classList.add('is-bitcoin');
-    frame.hidden = addressOnly || stripeOnly || !config.qr;
+    frame.hidden = !showQrFrame;
   }
-  if (qr && config.qr) {
+  if (qr && qrSrc) {
     const candidates = [];
     const pushUnique = (src) => {
       if (!src || candidates.includes(src)) return;
       candidates.push(src);
     };
-    pushUnique(config.qr);
-    if (config.qr.endsWith('.jpg')) pushUnique(config.qr.replace(/\.jpg$/, '.png'));
-    if (config.qr.endsWith('.png')) pushUnique(config.qr.replace(/\.png$/, '.jpg'));
+    pushUnique(qrSrc);
+    if (qrSrc.endsWith('.jpg')) pushUnique(qrSrc.replace(/\.jpg$/, '.png'));
+    if (qrSrc.endsWith('.png')) pushUnique(qrSrc.replace(/\.png$/, '.jpg'));
     // Absolute Pages URL — survives relative-path / stale-host issues in Telegram
-    if ((config.qr || '').includes('paypal-qr')) {
+    if ((qrSrc || '').includes('paypal-qr')) {
       pushUnique('https://jawhwf.github.io/J2026VAULT/assets/payment-icons/paypal-qr.png');
     }
-    if ((config.qr || '').includes('zelle-qr')) {
+    if ((qrSrc || '').includes('zelle-qr')) {
       pushUnique('https://jawhwf.github.io/J2026VAULT/assets/payment-icons/zelle-qr.png');
     }
-    if ((config.qr || '').includes('cashapp-qr')) {
+    if ((qrSrc || '').includes('cashapp-qr')) {
       pushUnique('https://jawhwf.github.io/J2026VAULT/assets/payment-icons/cashapp-qr.svg');
     }
 
@@ -5796,7 +5929,9 @@ function openScanPayQrModal(method) {
       qr.onerror = tryNext;
       qr.src = src;
     };
-    qr.alt = config.qrAlt || 'Payment QR code';
+    qr.alt = productCardFallback
+      ? (SCAN_PAY_METHODS.cashapp.qrAlt || 'Cash App payment QR code')
+      : (config.qrAlt || 'Payment QR code');
     tryNext();
   }
   if (addressRow && addressText) {
@@ -5870,13 +6005,16 @@ document.getElementById('scanPayStripeBtn')?.addEventListener('click', () => {
 const stripeFinishModal = document.getElementById('stripeFinishModal');
 
 function openStripeFinishModal() {
-  const plan = pendingPlan?.plan;
-  const price = pendingPlan?.price;
-  const planLabel = PLAN_DISPLAY[plan]?.name || plan || 'Plan';
+  const isProduct = pendingPayment?.kind === 'product';
+  const plan = pendingPayment?.plan;
+  const price = pendingPayment?.price;
+  const planLabel = isProduct
+    ? (pendingPayment?.title || 'Catalog item')
+    : (PLAN_DISPLAY[plan]?.name || plan || 'Plan');
   const planEl = document.getElementById('stripeFinishPlan');
   if (planEl) {
     planEl.textContent = price != null
-      ? `${planLabel} · $${price}`
+      ? `${planLabel} · $${Number(price).toFixed ? Number(price).toFixed(2) : price}`
       : planLabel;
   }
   stripeFinishModal.classList.add('open');
@@ -5900,7 +6038,12 @@ document.getElementById('createPaymentBtn').addEventListener('click', () => {
     showToast('Select a supported payment method');
     return;
   }
-  if (SCAN_PAY_METHODS[method].stripe && !getStripeCheckoutUrl(pendingPlan?.plan)) {
+  const isProduct = pendingPayment?.kind === 'product';
+  if (
+    SCAN_PAY_METHODS[method].stripe
+    && !isProduct
+    && !getStripeCheckoutUrl(pendingPayment?.plan)
+  ) {
     showToast('Card checkout is only for Leaker or HEAVENLY');
     return;
   }
@@ -6366,19 +6509,12 @@ function refreshBuyButton(product) {
   } else if (tier === 'bundle' || isPaid(product)) {
     btn.classList.add('is-buy');
     btn.textContent = `Buy $${product.price.toFixed(2)}`;
-    btn.onclick = () => {
-      owned.add(product.id);
-      userStats.purchases++;
-      updateProfileStats();
-      persistOwnProfileFromUi();
-      heartbeatOwnProfile();
-      library.add(product.id);
-      renderPurchases();
-      filterProducts();
-      renderBundles();
-      showPurchaseCelebration(product);
-      refreshBuyButton(product);
-    };
+    btn.onclick = () => openPaymentModal({
+      kind: 'product',
+      productId: product.id,
+      title: product.title || 'Catalog item',
+      price: product.price,
+    });
   } else {
     btn.innerHTML = `${DL_ICON} Download Free`;
     btn.onclick = () => startDownload(product);
@@ -6631,7 +6767,7 @@ function wait(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function initApp() {
+async function initApp() {
   persistVaultOwnerDevOverride();
   initTelegramUser();
 
@@ -6651,7 +6787,7 @@ function initApp() {
   }
 
   applyVaultAdminAccess();
-  loadCatalogProducts();
+  await loadCatalogProducts();
   loadProfileName();
 
   // Load accurate registration + shared member overrides, then heartbeat
@@ -6664,10 +6800,7 @@ function initApp() {
   updateNavBadges();
   updatePremiumUI();
   updatePlansPageUI();
-  renderFavourites();
-  renderPurchases();
-  filterProducts();
-  renderBundles();
+  syncCatalogUI();
   initBundleLottie(document);
   startCarousel();
   renderAdminPanel();
@@ -6692,13 +6825,13 @@ async function runSplash() {
   const statusEl = document.getElementById('splashStatus');
   const tipEl = document.getElementById('splashTip');
 
-  const finishWithoutSplash = () => {
-    const ready = initApp();
+  const finishWithoutSplash = async () => {
+    const ready = await initApp();
     if (ready) maybePromptOwnerPassword();
   };
 
   if (!splash) {
-    finishWithoutSplash();
+    await finishWithoutSplash();
     return;
   }
 
@@ -6721,7 +6854,7 @@ async function runSplash() {
   let ready = false;
   try {
     if (document.fonts?.ready) await document.fonts.ready;
-    ready = initApp();
+    ready = await initApp();
     await wait(0);
   } catch (err) {
     console.error('Splash init error:', err);
