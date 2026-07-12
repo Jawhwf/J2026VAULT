@@ -12,6 +12,7 @@ from urllib.parse import parse_qs, urlparse
 from members_store import (
     get_member,
     list_members,
+    member_stats,
     normalize_member,
     replace_all_members,
     upsert_member,
@@ -111,12 +112,19 @@ def build_handler(bot_token: str):
 
         def do_GET(self):
             path = urlparse(self.path).path.rstrip("/") or "/"
+
+            # Public health probe (used by Mini App / tunnel checks)
+            if path in ("/api/health", "/health"):
+                return self._json(200, {"ok": True, "service": "j2026vault-members"})
+
             user = self._auth_user()
             if not user:
                 return self._json(401, {"ok": False, "error": "Unauthorized"})
 
-            if path in ("/api/health", "/health"):
-                return self._json(200, {"ok": True})
+            if path in ("/api/stats", "/stats"):
+                if not is_owner_user(user):
+                    return self._json(403, {"ok": False, "error": "Owners only"})
+                return self._json(200, {"ok": True, "stats": member_stats(), "members": list_members()})
 
             if path in ("/api/me", "/me"):
                 member = get_member(int(user["id"]))
@@ -126,7 +134,15 @@ def build_handler(bot_token: str):
                 if not is_owner_user(user):
                     return self._json(403, {"ok": False, "error": "Owners only"})
                 members = list_members()
-                return self._json(200, {"ok": True, "count": len(members), "members": members})
+                return self._json(
+                    200,
+                    {
+                        "ok": True,
+                        "count": len(members),
+                        "stats": member_stats(),
+                        "members": members,
+                    },
+                )
 
             return self._json(404, {"ok": False, "error": "Not found"})
 
@@ -138,6 +154,9 @@ def build_handler(bot_token: str):
             body = self._read_json()
 
             if path in ("/api/me/sync", "/me/sync", "/api/heartbeat", "/heartbeat"):
+                source = str(body.get("source") or "webapp").strip().lower()
+                if source not in {"bot", "webapp", "web", "editor", "manual"}:
+                    source = "webapp"
                 patch = {
                     "id": int(user["id"]),
                     "username": user.get("username") or "",
@@ -146,18 +165,24 @@ def build_handler(bot_token: str):
                     or (f"@{user.get('username')}" if user.get("username") else f"User {user['id']}"),
                     "photoUrl": body.get("photoUrl") or user.get("photo_url") or "",
                 }
-                # Members can report their own local stats; owners can still override later
                 for key in ("downloads", "purchases", "avatarDataUrl", "registeredAt"):
                     if key in body:
                         patch[key] = body[key]
-                # Non-owners cannot self-assign a paid plan through heartbeat
                 if is_owner_user(user) and "plan" in body:
                     patch["plan"] = body.get("plan")
                     if "endsAt" in body:
                         patch["endsAt"] = body.get("endsAt")
-                store = upsert_member(patch)
+                store = upsert_member(patch, touch=True, source=source)
                 member = get_member(int(user["id"]))
-                return self._json(200, {"ok": True, "member": member, "count": len(store.get("members") or [])})
+                return self._json(
+                    200,
+                    {
+                        "ok": True,
+                        "member": member,
+                        "count": len(store.get("members") or []),
+                        "stats": member_stats() if is_owner_user(user) else None,
+                    },
+                )
 
             if path in ("/api/members", "/members"):
                 if not is_owner_user(user):

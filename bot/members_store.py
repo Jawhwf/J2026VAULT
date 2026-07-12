@@ -8,12 +8,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 _LOCK = threading.Lock()
-DATA_DIR = Path(__file__).resolve().parent / "data"
+BOT_DIR = Path(__file__).resolve().parent
+DATA_DIR = BOT_DIR / "data"
 STORE_PATH = DATA_DIR / "members.json"
-# Also mirror next to the Mini App so GitHub Pages can serve it after upload
-APP_MIRROR_PATH = Path(__file__).resolve().parent.parent / "members.json"
+# Mirror to repo root so GitHub Pages can read members.json
+APP_MIRROR_PATH = BOT_DIR.parent / "members.json"
 
 PLAN_KEYS = {"MORTAL", "ACOLYTE", "ETERNAL"}
+SOURCE_KEYS = {"bot", "webapp", "web", "editor", "manual"}
 
 
 def _now_iso() -> str:
@@ -21,7 +23,6 @@ def _now_iso() -> str:
 
 
 def _today_display() -> str:
-    # DD.MM.YYYY to match the Mini App profile label style
     return datetime.now().strftime("%d.%m.%Y")
 
 
@@ -71,6 +72,19 @@ def save_store(data: dict) -> dict:
         return data
 
 
+def _normalize_sources(raw) -> list[str]:
+    out: list[str] = []
+    if isinstance(raw, str) and raw.strip():
+        raw = [raw]
+    if not isinstance(raw, list):
+        return out
+    for item in raw:
+        key = str(item or "").strip().lower()
+        if key in SOURCE_KEYS and key not in out:
+            out.append(key)
+    return out
+
+
 def normalize_member(raw: dict | None, *, fallback_id: int | None = None) -> dict | None:
     if not isinstance(raw, dict):
         raw = {}
@@ -97,10 +111,21 @@ def normalize_member(raw: dict | None, *, fallback_id: int | None = None) -> dic
         purchases = max(0, int(raw.get("purchases") or 0))
     except (TypeError, ValueError):
         purchases = 0
+    try:
+        seen_count = max(0, int(raw.get("seenCount") or 0))
+    except (TypeError, ValueError):
+        seen_count = 0
 
     ends_at = raw.get("endsAt")
     if ends_at is not None:
         ends_at = str(ends_at)
+
+    first_source = str(raw.get("firstSource") or "").strip().lower()
+    if first_source not in SOURCE_KEYS:
+        first_source = ""
+
+    last_seen = str(raw.get("lastSeenAt") or "").strip() or None
+    sources = _normalize_sources(raw.get("sources"))
 
     return {
         "id": member_id,
@@ -113,28 +138,42 @@ def normalize_member(raw: dict | None, *, fallback_id: int | None = None) -> dic
         "purchases": purchases,
         "plan": plan,
         "endsAt": ends_at,
+        "sources": sources,
+        "firstSource": first_source or (sources[0] if sources else ""),
+        "seenCount": seen_count,
+        "lastSeenAt": last_seen,
         "updatedAt": str(raw.get("updatedAt") or _now_iso()),
     }
 
 
-def upsert_member(patch: dict, *, create_registered: bool = True) -> dict:
+def upsert_member(patch: dict, *, create_registered: bool = True, touch: bool = False, source: str | None = None) -> dict:
     store = load_store()
     members = list(store.get("members") or [])
     normalized = normalize_member(patch)
     if not normalized:
         raise ValueError("Invalid member")
 
+    src = str(source or patch.get("source") or "").strip().lower()
+    if src not in SOURCE_KEYS:
+        src = ""
+
     idx = next((i for i, m in enumerate(members) if int(m.get("id") or 0) == normalized["id"]), None)
+    now = _now_iso()
+
     if idx is None:
+        if src:
+            normalized["sources"] = [src]
+            normalized["firstSource"] = src
+        if touch or src:
+            normalized["seenCount"] = max(1, normalized.get("seenCount") or 0)
+            normalized["lastSeenAt"] = now
         if not create_registered:
             normalized["registeredAt"] = normalized["registeredAt"] or _today_display()
         members.append(normalized)
     else:
         prev = normalize_member(members[idx]) or {}
-        # Keep original registration date unless the patch explicitly sets one
         if not str(patch.get("registeredAt") or "").strip():
             normalized["registeredAt"] = prev.get("registeredAt") or normalized["registeredAt"]
-        # Don't wipe avatar/photo with empty values from a partial heartbeat
         if not normalized.get("avatarDataUrl") and prev.get("avatarDataUrl"):
             normalized["avatarDataUrl"] = prev["avatarDataUrl"]
         if not normalized.get("photoUrl") and prev.get("photoUrl"):
@@ -150,6 +189,28 @@ def upsert_member(patch: dict, *, create_registered: bool = True) -> dict:
         if "plan" not in patch:
             normalized["plan"] = prev.get("plan", "MORTAL")
             normalized["endsAt"] = prev.get("endsAt")
+
+        sources = list(prev.get("sources") or [])
+        for s in normalized.get("sources") or []:
+            if s not in sources:
+                sources.append(s)
+        if src and src not in sources:
+            sources.append(src)
+        normalized["sources"] = sources
+        normalized["firstSource"] = prev.get("firstSource") or (sources[0] if sources else "")
+
+        seen = int(prev.get("seenCount") or 0)
+        if touch or src:
+            seen += 1
+            normalized["lastSeenAt"] = now
+        else:
+            normalized["lastSeenAt"] = prev.get("lastSeenAt")
+        if "seenCount" in patch:
+            try:
+                seen = max(seen, int(patch.get("seenCount") or 0))
+            except (TypeError, ValueError):
+                pass
+        normalized["seenCount"] = seen
         members[idx] = normalized
 
     store["members"] = members
@@ -174,8 +235,26 @@ def list_members() -> list[dict]:
         member = normalize_member(raw)
         if member:
             out.append(member)
-    out.sort(key=lambda m: (m.get("name") or "").lower())
+    out.sort(key=lambda m: (m.get("lastSeenAt") or m.get("updatedAt") or ""), reverse=True)
     return out
+
+
+def member_stats() -> dict:
+    members = list_members()
+    with_username = sum(1 for m in members if m.get("username"))
+    today = _today_display()
+    new_today = sum(1 for m in members if m.get("registeredAt") == today)
+    by_source: dict[str, int] = {}
+    for m in members:
+        key = m.get("firstSource") or "unknown"
+        by_source[key] = by_source.get(key, 0) + 1
+    return {
+        "total": len(members),
+        "withUsername": with_username,
+        "newToday": new_today,
+        "bySource": by_source,
+        "updatedAt": load_store().get("updatedAt"),
+    }
 
 
 def replace_all_members(members: list) -> dict:
@@ -187,8 +266,8 @@ def replace_all_members(members: list) -> dict:
     return save_store({"members": cleaned})
 
 
-def touch_from_telegram_user(user) -> dict:
-    """Record / refresh a member when they hit the bot."""
+def touch_from_telegram_user(user, *, source: str = "bot") -> dict:
+    """Record / refresh a member when they hit the bot or Mini App."""
     if user is None:
         raise ValueError("Missing user")
     user_id = int(getattr(user, "id", 0) or 0)
@@ -198,10 +277,14 @@ def touch_from_telegram_user(user) -> dict:
     first = getattr(user, "first_name", None) or ""
     last = getattr(user, "last_name", None) or ""
     name = f"{first} {last}".strip() or (f"@{username}" if username else f"User {user_id}")
+    photo = getattr(user, "photo_url", None) or ""
     return upsert_member(
         {
             "id": user_id,
             "username": username,
             "name": name,
-        }
+            "photoUrl": photo,
+        },
+        touch=True,
+        source=source,
     )

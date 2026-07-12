@@ -1,14 +1,307 @@
+Stopping other bot instances...
+Requirement already satisfied: pyTelegramBotAPI>=4.32.0 in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from -r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (4.32.0)
+Requirement already satisfied: requests in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from pyTelegramBotAPI>=4.32.0->-r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (2.32.5)
+Requirement already satisfied: charset_normalizer<4,>=2 in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from requests->pyTelegramBotAPI>=4.32.0->-r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (3.4.9)
+Requirement already satisfied: idna<4,>=2.5 in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from requests->pyTelegramBotAPI>=4.32.0->-r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (3.18)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from requests->pyTelegramBotAPI>=4.32.0->-r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (2.6.3)
+Requirement already satisfied: certifi>=2017.4.17 in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from requests->pyTelegramBotAPI>=4.32.0->-r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (2026.6.17)
+
+Starting J2026VaultBot...
+  /Users/j2025/Desktop/J2026VaultBot/bot
+  Members: /Users/j2025/Desktop/J2026VaultBot/bot/data/members.json
+  Press Ctrl+C to stop.
+
 ========================================
  J2026VaultBot is now running
 ========================================
-Bot: @J2026VaultBot
+Bot: @J26VaultBot
 Mini App: https://jawhwf.github.io/J2026VAULT/
-Assets: /Users/j2025/Desktop/J2026VaultBot/bot/assets
-  welcome: OK — welcome.png
-  premium: OK — membership.png
-  help: OK — help.png
-  menu: OK — menu.png
-Loaded: /Users/j2025/Desktop/J2026VaultBot/bot/main.py
+Folder: /Users/j2025/Desktop/J2026VaultBot/bot
+  welcome: OK — welcome.jpg
+  premium: OK — membership.jpg
+  help: OK — help.jpg
+  menu: OK — menu.jpg
+Bot commands registered
+[members-api] listening on http://0.0.0.0:8765
+Members API: http://127.0.0.1:8765
 Polling for updates...
 Press Ctrl+C to stop.
 
+Stopping other bot instances...
+Requirement already satisfied: pyTelegramBotAPI>=4.32.0 in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from -r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (4.32.0)
+Requirement already satisfied: requests in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from pyTelegramBotAPI>=4.32.0->-r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (2.32.5)
+Requirement already satisfied: charset_normalizer<4,>=2 in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from requests->pyTelegramBotAPI>=4.32.0->-r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (3.4.9)
+Requirement already satisfied: idna<4,>=2.5 in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from requests->pyTelegramBotAPI>=4.32.0->-r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (3.18)
+Requirement already satisfied: urllib3<3,>=1.21.1 in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from requests->pyTelegramBotAPI>=4.32.0->-r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (2.6.3)
+Requirement already satisfied: certifi>=2017.4.17 in /Users/j2025/Desktop/J2026VaultBot/.venv/lib/python3.9/site-packages (from requests->pyTelegramBotAPI>=4.32.0->-r /Users/j2025/Desktop/J2026VaultBot/bot/requirements.txt (line 1)) (2026.6.17)
+
+Starting J2026VaultBot...
+  /Users/j2025/Desktop/J2026VaultBot/bot
+  Members: /Users/j2025/Desktop/J2026VaultBot/bot/data/members.json
+  Press Ctrl+C to stop.
+
+========================================
+ J2026VaultBot is now running
+========================================
+Bot: @J26VaultBot
+Mini App: https://jawhwf.github.io/J2026VAULT/
+Folder: /Users/j2025/Desktop/J2026VaultBot/bot
+  welcome: OK — welcome.jpg
+  premium: OK — membership.jpg
+  help: OK — help.jpg
+  menu: OK — menu.jpg
+Bot commands registered
+[members-api] listening on http://0.0.0.0:8765
+Members API: http://127.0.0.1:8765
+Polling for updates...
+Press Ctrl+C to stop.
+
+cmd /start from 6690519994 (@J2026Vault) text='/start'
+sent photo /start -> 6690519994
+cmd /start -> ok for 6690519994
+cmd /help from 6690519994 (@J2026Vault) text='/help'
+sent photo /help -> 6690519994
+cmd /help -> ok for 6690519994
+cmd /start from 6690519994 (@J2026Vault) text='/start'
+sent photo /start -> 6690519994
+cmd /start -> ok for 6690519994
+========================================
+ J2026VaultBot is now running
+========================================
+Bot: @J26VaultBot
+Mini App: https://jawhwf.github.io/J2026VAULT/
+Folder: /Users/j2025/Desktop/J2026VaultBot/bot
+  welcome: OK — welcome.jpg
+  premium: OK — membership.jpg
+  help: OK — help.jpg
+  menu: OK — menu.jpg
+Bot commands registered
+[members-api] listening on http://0.0.0.0:8765
+Members API: http://127.0.0.1:8765
+Polling for updates...
+Press Ctrl+C to stop.
+
+cmd /start from 6690519994 (@J2026Vault) text='/start'
+sent photo /start -> 6690519994
+cmd /start -> ok for 6690519994
+cmd /membership from 6690519994 (@J2026Vault) text='/membership'
+sent photo /membership -> 6690519994
+cmd /membership -> ok for 6690519994
+cmd /start from 6690519994 (@J2026Vault) text='/vault'
+sent photo /start -> 6690519994
+cmd /start -> ok for 6690519994
+cmd /help from 6690519994 (@J2026Vault) text='/help'
+sent photo /help -> 6690519994
+cmd /help -> ok for 6690519994
+========================================
+ J2026VaultBot is now running
+========================================
+Bot: @J26VaultBot
+Mini App: https://jawhwf.github.io/J2026VAULT/
+Folder: /Users/j2025/Desktop/J2026VaultBot/bot
+  welcome: OK — welcome.jpg
+  premium: OK — membership.jpg
+  help: OK — help.jpg
+  menu: OK — menu.jpg
+Bot commands registered
+[members-api] listening on http://0.0.0.0:8765
+Members API: http://127.0.0.1:8765
+Polling for updates...
+Press Ctrl+C to stop.
+
+cmd /start from 6690519994 (@J2026Vault) text='/start'
+sent photo /start -> 6690519994
+cmd /start -> ok for 6690519994
+cmd /membership from 6690519994 (@J2026Vault) text='/membership'
+edited panel /membership -> 6690519994 msg=17
+cmd /membership -> ok for 6690519994
+cmd /help from 6690519994 (@J2026Vault) text='/help'
+edited panel /help -> 6690519994 msg=17
+cmd /help -> ok for 6690519994
+edited panel /start -> 6690519994 msg=17
+nav start -> ok for 6690519994
+========================================
+ J2026VaultBot is now running
+========================================
+Bot: @J26VaultBot
+Mini App: https://jawhwf.github.io/J2026VAULT/
+Folder: /Users/j2025/Desktop/J2026VaultBot/bot
+  welcome: OK — welcome.jpg
+  premium: OK — membership.jpg
+  help: OK — help.jpg
+  menu: OK — menu.jpg
+Bot commands registered
+[members-api] listening on http://0.0.0.0:8765
+Members API: http://127.0.0.1:8765
+Polling for updates...
+Press Ctrl+C to stop.
+
+cmd /start from 6690519994 (@J2026Vault) text='/start'
+sent photo /start -> 6690519994
+cmd /start -> ok for 6690519994
+cmd /membership from 6690519994 (@J2026Vault) text='/membership'
+edited panel /membership -> 6690519994 msg=21
+cmd /membership -> ok for 6690519994
+========================================
+ J2026VaultBot is now running
+========================================
+Bot: @J26VaultBot
+Mini App: https://jawhwf.github.io/J2026VAULT/
+Folder: /Users/j2025/Desktop/J2026VaultBot/bot
+  welcome: OK — welcome.jpg
+  premium: OK — membership.jpg
+  help: OK — help.jpg
+  menu: OK — menu.jpg
+  paypal-card: OK — paypal-card.jpg
+  cashapp-card: OK — cashapp-card.jpg
+  zelle-card: OK — zelle-card.jpg
+Bot commands registered
+[members-api] listening on http://0.0.0.0:8765
+Members API: http://127.0.0.1:8765
+Polling for updates...
+Press Ctrl+C to stop.
+
+cmd /start from 6690519994 (@J2026Vault) text='/start'
+sent photo /start -> 6690519994
+cmd /start -> ok for 6690519994
+cmd /membership from 6690519994 (@J2026Vault) text='/membership'
+edited panel /membership -> 6690519994 msg=24
+cmd /membership -> ok for 6690519994
+edited panel /pay:paypal -> 6690519994 msg=24
+pay paypal -> ok for 6690519994
+edited panel /membership -> 6690519994 msg=24
+nav membership -> ok for 6690519994
+edited panel /pay:cashapp -> 6690519994 msg=24
+pay cashapp -> ok for 6690519994
+========================================
+ J2026VaultBot is now running
+========================================
+Bot: @J26VaultBot
+Mini App: https://jawhwf.github.io/J2026VAULT/
+Folder: /Users/j2025/Desktop/J2026VaultBot/bot
+  welcome: OK — welcome.jpg
+  premium: OK — membership.jpg
+  help: OK — help.jpg
+  menu: OK — menu.jpg
+  paypal-card: OK — paypal-card.jpg
+  cashapp-card: OK — cashapp-card.jpg
+  zelle-card: OK — zelle-card.jpg
+Bot commands registered
+[members-api] listening on http://0.0.0.0:8765
+Members API: http://127.0.0.1:8765
+Polling for updates...
+Press Ctrl+C to stop.
+
+cmd /start from 6690519994 (@J2026Vault) text='/start'
+sent photo /start -> 6690519994
+cmd /start -> ok for 6690519994
+cmd /membership from 6690519994 (@J2026Vault) text='/membership'
+edited panel /membership -> 6690519994 msg=29
+cmd /membership -> ok for 6690519994
+edited panel /pay:paypal -> 6690519994 msg=29
+pay paypal -> ok for 6690519994
+edited panel /membership -> 6690519994 msg=29
+nav membership -> ok for 6690519994
+edited panel /pay:cashapp -> 6690519994 msg=29
+pay cashapp -> ok for 6690519994
+edited panel /membership -> 6690519994 msg=29
+nav membership -> ok for 6690519994
+edited panel /pay:zelle -> 6690519994 msg=29
+pay zelle -> ok for 6690519994
+edited panel /membership -> 6690519994 msg=29
+nav membership -> ok for 6690519994
+edited panel /start -> 6690519994 msg=29
+nav start -> ok for 6690519994
+cmd /help from 6690519994 (@J2026Vault) text='/help'
+edited panel /help -> 6690519994 msg=29
+cmd /help -> ok for 6690519994
+edited panel /start -> 6690519994 msg=29
+nav start -> ok for 6690519994
+========================================
+ J2026VaultBot is now running
+========================================
+Bot: @J26VaultBot
+Mini App: https://jawhwf.github.io/J2026VAULT/
+Folder: /Users/j2025/Desktop/J2026VaultBot/bot
+  welcome: OK — welcome.jpg
+  premium: OK — membership.jpg
+  help: OK — help.jpg
+  menu: OK — menu.jpg
+  paypal-card: OK — paypal-card.jpg
+  cashapp-card: OK — cashapp-card.jpg
+  zelle-card: OK — zelle-card.jpg
+Bot commands registered
+[members-api] listening on http://0.0.0.0:8765
+Members API: http://127.0.0.1:8765
+Polling for updates...
+Press Ctrl+C to stop.
+
+cmd /start from 6690519994 (@J2026Vault) text='/start'
+sent photo /start -> 6690519994
+cmd /start -> ok for 6690519994
+cmd /membership from 6690519994 (@J2026Vault) text='/membership'
+edited panel /membership -> 6690519994 msg=33
+cmd /membership -> ok for 6690519994
+edited panel /pay:paypal -> 6690519994 msg=33
+pay paypal -> ok for 6690519994
+edited panel /membership -> 6690519994 msg=33
+nav membership -> ok for 6690519994
+edited panel /pay:cashapp -> 6690519994 msg=33
+pay cashapp -> ok for 6690519994
+edited panel /membership -> 6690519994 msg=33
+nav membership -> ok for 6690519994
+edited panel /pay:zelle -> 6690519994 msg=33
+pay zelle -> ok for 6690519994
+edited panel /membership -> 6690519994 msg=33
+nav membership -> ok for 6690519994
+edited panel /pay:zelle -> 6690519994 msg=33
+pay zelle -> ok for 6690519994
+edited panel /membership -> 6690519994 msg=33
+nav membership -> ok for 6690519994
+edited panel /start -> 6690519994 msg=33
+nav start -> ok for 6690519994
+========================================
+ J2026VaultBot is now running
+========================================
+Bot: @J26VaultBot
+Mini App: https://jawhwf.github.io/J2026VAULT/
+Folder: /Users/j2025/Desktop/J2026VaultBot/bot
+  welcome: OK — welcome.jpg
+  premium: OK — membership.jpg
+  help: OK — help.jpg
+  menu: OK — menu.jpg
+  paypal-card: OK — paypal-card.jpg
+  cashapp-card: OK — cashapp-card.jpg
+  zelle-card: OK — zelle-card.jpg
+Bot commands registered
+[members-api] listening on http://0.0.0.0:8765
+Members API: http://127.0.0.1:8765
+Tip: set MEMBERS_API_PUBLIC_URL or run ./bot/run-public-api.sh so Mini App users sync live.
+Members mirror: /Users/j2025/Desktop/J2026VaultBot/members.json
+Polling for updates...
+Press Ctrl+C to stop.
+
+========================================
+ J2026VaultBot is now running
+========================================
+Bot: @J26VaultBot
+Mini App: https://jawhwf.github.io/J2026VAULT/
+Folder: /Users/j2025/Desktop/J2026VaultBot/bot
+  welcome: OK — welcome.jpg
+  premium: OK — membership.jpg
+  help: OK — help.jpg
+  menu: OK — menu.jpg
+  paypal-card: OK — paypal-card.jpg
+  cashapp-card: OK — cashapp-card.jpg
+  zelle-card: OK — zelle-card.jpg
+Bot commands registered
+[members-api] listening on http://0.0.0.0:8765
+Members API: http://127.0.0.1:8765
+Tip: set MEMBERS_API_PUBLIC_URL or run ./bot/run-public-api.sh so Mini App users sync live.
+Members mirror: /Users/j2025/Desktop/J2026VaultBot/members.json
+Polling for updates...
+Press Ctrl+C to stop.
+
+cmd /start from 6690519994 (@J2026Vault) text='/start'
+sent photo /start -> 6690519994
+cmd /start -> ok for 6690519994

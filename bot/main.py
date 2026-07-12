@@ -1,29 +1,31 @@
 """
-J2026VaultBot
-Official Telegram bot for J2026Vault.
+J2026VaultBot — everything for the Telegram bot is in this folder.
 
-Layout:
-    bot/
-      main.py              # this file
-      config.py            # secrets (gitignored) — copy from config.example.py
-      config.example.py
-      requirements.txt
-      assets/              # welcome / membership / help / menu banners
-      run-bot.sh           # macOS / Linux
-      run-bot.bat          # Windows
-      logs/                # runtime logs (optional)
-
-Run (from project root):
-    ./run-bot.sh          # macOS / Linux
-    run-bot.bat           # Windows
-
-Or from this folder:
-    ./run-bot.sh
+  bot/
+    main.py
+    config.py              (gitignored — copy from config.example.py)
+    config.example.py
+    requirements.txt
+    members_store.py
+    members_api.py
+    assets/                welcome / membership / help / menu images
+    data/members.json      registered members
+    logs/
+    run-bot.sh
     run-bot.bat
+
+Start:
+  ./bot/run-bot.sh
+  bot\\run-bot.bat
 """
 
+from __future__ import annotations
+
+import html
+import re
 import sys
 import threading
+import time
 from io import BytesIO
 from pathlib import Path
 
@@ -39,166 +41,233 @@ from config import (
 )
 
 try:
-    from config import MEMBERS_API_HOST, MEMBERS_API_PORT
+    from config import MEMBERS_API_HOST, MEMBERS_API_PORT, MEMBERS_API_PUBLIC_URL
 except ImportError:
     MEMBERS_API_HOST = "0.0.0.0"
     MEMBERS_API_PORT = 8765
+    MEMBERS_API_PUBLIC_URL = ""
 
-from members_store import list_members, touch_from_telegram_user
 from members_api import is_owner_user, start_members_api
+from members_store import list_members, member_stats, touch_from_telegram_user
 
-BOT_USERNAME = "J2026VaultBot"
-ASSETS_DIR = Path(__file__).resolve().parent / "assets"
+BOT_USERNAME = "J26VaultBot"
+BOT_DIR = Path(__file__).resolve().parent
+ASSETS_DIR = BOT_DIR / "assets"
 
-IMG_WELCOME = ASSETS_DIR / "welcome.png"
-IMG_PREMIUM = ASSETS_DIR / "membership.png"
-IMG_HELP = ASSETS_DIR / "help.png"
-IMG_MENU = ASSETS_DIR / "menu.png"
 
-# threaded=False avoids overlapping navigates fighting over the same panel
+def _asset(*names: str) -> Path:
+    for name in names:
+        path = ASSETS_DIR / name
+        if path.exists():
+            return path
+    return ASSETS_DIR / names[0]
+
+
+IMG_WELCOME = _asset("welcome.jpg", "welcome.png")
+IMG_PREMIUM = _asset("membership.jpg", "membership.png")
+IMG_HELP = _asset("help.jpg", "help.png")
+IMG_MENU = _asset("menu.jpg", "menu.png")
+
+PAYMENTS_DIR = ASSETS_DIR / "payments"
+PAYMENT_METHODS = {
+    "paypal": {
+        "label": "PayPal",
+        "card": PAYMENTS_DIR / "paypal-card.jpg",
+        "banner": PAYMENTS_DIR / "paypal-banner.jpg",
+        "qr": PAYMENTS_DIR / "paypal-qr.jpg",
+    },
+    "cashapp": {
+        "label": "Cash App",
+        "card": PAYMENTS_DIR / "cashapp-card.jpg",
+        "banner": PAYMENTS_DIR / "cashapp-banner.jpg",
+        "qr": PAYMENTS_DIR / "cashapp-qr.jpg",
+    },
+    "zelle": {
+        "label": "Zelle",
+        "card": PAYMENTS_DIR / "zelle-card.jpg",
+        "banner": PAYMENTS_DIR / "zelle-banner.jpg",
+        "qr": PAYMENTS_DIR / "zelle-qr.jpg",
+    },
+}
+
+# How long payment QR stays up before returning to membership
+PAYMENT_TTL_SEC = 7 * 60
+
 bot = TeleBot(API_TOKEN, parse_mode="HTML", threaded=False)
 
-# chat_id -> {"current": screen_key|None, "stack": [...], "message_id": int|None}
-_nav = {}
 _nav_lock = threading.Lock()
-
-_IMAGE_BYTES = {}
-for _path in (IMG_WELCOME, IMG_PREMIUM, IMG_HELP, IMG_MENU):
-    if _path.exists():
-        _IMAGE_BYTES[_path] = _path.read_bytes()
+# chat_id -> last bot panel message id (single clean panel)
+_last_panel: dict[int, int] = {}
+# chat_id -> extra QR message ids (cleaned with the payment panel)
+_payment_extras: dict[int, list[int]] = {}
+_payment_timers: dict[int, threading.Timer] = {}
+_image_cache: dict[Path, bytes] = {}
+_welcomed: set[int] = set()
 
 
 MEMBERSHIP_TEXT = """
 <b>💎 How To Buy Vault Access</b>
 
 <b>Basic Membership — $5/month</b>
-Access to the archive, including:
-• Programs
-• Games
-• Movies
-• TV Shows
-• Editing plugins & packs
-• Photo / Blender / Audio plugins
-• Drumkits
-• CEP extensions
-• Music projects & leaks
-• Discord stashes
-• Movie / trusted sites
-• Music trackers
-• Steam methods
-
-DM staff or owner to confirm.
+Access to the archive, including programs, games, movies, TV, editing packs, plugins, drumkits, leaks, and more.
 
 <b>Lifetime Membership — $100 one-time</b>
-• Permanent server access
-• Early access to unreleased content
-• Custom requests
-• First access to new drops
-• Resell permissions
-• Direct help & tutorials
-
-DM staff or owner to confirm.
+Everything in Basic, forever. No renewals.
 
 <b>💳 Payment methods</b>
-We currently accept:
-• PayPal
-• Cash App
+Tap <b>PayPal</b>, <b>Cash App</b>, or <b>Zelle</b> below to open the QR (stays up ~7 minutes).
 
-We do <b>not</b> accept Bitcoin, crypto, or other apps at the moment.
+After you pay, DM proof on <b>Discord</b>: screenshot + your name / email used to pay.
 
-DM staff or owner to pay / confirm.
-
-Private members-only vault — real members only.
+Need a hand? /help · or tap <b>Back</b> for the welcome screen.
 """.strip()
 
 
-def welcome_text(first_name):
+def payment_text(method_key: str) -> str:
+    label = PAYMENT_METHODS[method_key]["label"]
+    mins = PAYMENT_TTL_SEC // 60
     return f"""
-<b>👋 Welcome, {first_name}!</b>
+<b>💳 Pay with {html.escape(label)}</b>
 
-Welcome to <b>J2026Vault</b> — the official gateway to the vault Mini App and membership archive.
+Scan the QR below (or use the banner details).
 
-Tap the <b>App</b> button at the bottom left to launch the vault, or join the community links below.
+This payment screen stays open for about <b>{mins} minutes</b>.
 
-Send /membership for plans & payment info.
-Send /help for commands.
+<b>After you pay</b> — DM proof on Discord:
+• payment screenshot
+• name / email used on the payment
+
+Staff will confirm and unlock access.
+
+Tap <b>Back</b> anytime to return to plans. /help if you need help.
+""".strip()
+
+def welcome_text(first_name: str) -> str:
+    name = html.escape(str(first_name or "there"))
+    return f"""
+<b>👋 Welcome, {name}!</b>
+
+Welcome to <b>J2026Vault</b>.
+
+• Tap <b>App</b> (bottom left) to open the vault Mini App
+• /membership — plans & payments
+• /help — commands
+
+Community links are below.
 """.strip()
 
 
 HELP_TEXT = """
 <b>📖 Help</b>
 
-• /start — welcome screen
+• /start — welcome
 • /membership — plans & payments
 • /help — this menu
 
-<b>Open the vault</b>
-Use the <b>App</b> button at the bottom left.
-
-Questions? DM staff or owner.
-""".strip()
-
-
-MENU_TEXT = """
-<b>🤖 J2026Vault Bot</b>
-
-Use:
-• /start — welcome
-• /membership — Basic ($5/mo) & Lifetime ($100)
-• /help — commands
-
 Open the vault with the <b>App</b> button at the bottom left.
+Tap <b>Back</b> to return to welcome.
 """.strip()
 
 
-def screen_content(screen, first_name="there"):
+def screen_payload(screen: str, first_name: str):
     if screen == "start":
         return IMG_WELCOME, welcome_text(first_name)
     if screen == "membership":
         return IMG_PREMIUM, MEMBERSHIP_TEXT
-    if screen == "help":
-        return IMG_HELP, HELP_TEXT
-    return IMG_MENU, MENU_TEXT
+    if screen.startswith("pay:"):
+        method = screen.split(":", 1)[-1]
+        info = PAYMENT_METHODS.get(method)
+        if info:
+            image = info["card"] if info["card"].exists() else info["banner"]
+            return image, payment_text(method)
+    return IMG_HELP, HELP_TEXT
 
 
-def photo_file(image_path):
-    data = _IMAGE_BYTES.get(image_path)
+def photo_buf(image_path: Path):
+    if not image_path.exists():
+        return None
+    data = _image_cache.get(image_path)
     if data is None:
-        if not image_path.exists():
-            return None
         data = image_path.read_bytes()
-        _IMAGE_BYTES[image_path] = data
+        _image_cache[image_path] = data
     buf = BytesIO(data)
     buf.name = image_path.name
     return buf
 
 
-def main_menu(show_back=False):
+def screen_markup(screen: str) -> types.InlineKeyboardMarkup:
     markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        types.InlineKeyboardButton(
-            "Join Telegram Community",
-            url=TELEGRAM_COMMUNITY,
+    if screen == "membership":
+        markup.row(
+            types.InlineKeyboardButton("PayPal", callback_data="pay:paypal"),
+            types.InlineKeyboardButton("Cash App", callback_data="pay:cashapp"),
+            types.InlineKeyboardButton("Zelle", callback_data="pay:zelle"),
         )
-    )
-    markup.add(
-        types.InlineKeyboardButton(
-            "Join Discord",
-            url=DISCORD_INVITE,
-        )
-    )
-    if show_back:
-        markup.add(
-            types.InlineKeyboardButton(
-                "🔙 Back",
-                callback_data="nav:back",
-            )
-        )
+    elif screen.startswith("pay:"):
+        markup.add(types.InlineKeyboardButton("Join Discord (send proof)", url=DISCORD_INVITE))
+    markup.add(types.InlineKeyboardButton("Join Telegram Community", url=TELEGRAM_COMMUNITY))
+    if not screen.startswith("pay:"):
+        markup.add(types.InlineKeyboardButton("Join Discord", url=DISCORD_INVITE))
+    markup.add(types.InlineKeyboardButton("Open Mini App", url=WEBAPP_URL))
+    if screen == "membership":
+        markup.add(types.InlineKeyboardButton("⬅️ Back", callback_data="nav:start"))
+    elif screen.startswith("pay:"):
+        markup.add(types.InlineKeyboardButton("⬅️ Back to plans", callback_data="nav:membership"))
+    elif screen == "help":
+        markup.add(types.InlineKeyboardButton("⬅️ Back", callback_data="nav:start"))
     return markup
 
 
-def delete_message_safe(chat_id, message_id):
-    if not chat_id or not message_id:
+def cancel_payment_timer(chat_id: int, *, clear_extras: bool = True) -> None:
+    with _nav_lock:
+        timer = _payment_timers.pop(chat_id, None)
+        extras = _payment_extras.pop(chat_id, []) if clear_extras else []
+    if timer is not None:
+        try:
+            timer.cancel()
+        except Exception:
+            pass
+    for mid in extras:
+        safe_delete(chat_id, mid)
+
+
+def clear_payment_extras(chat_id: int) -> None:
+    with _nav_lock:
+        extras = _payment_extras.pop(chat_id, [])
+    for mid in extras:
+        safe_delete(chat_id, mid)
+
+
+def schedule_payment_expiry(chat_id: int, first_name: str) -> None:
+    # Replace any previous timer, but keep the QR extras we just posted
+    cancel_payment_timer(chat_id, clear_extras=False)
+
+    def _expire():
+        print(f"payment expired -> membership for {chat_id}", flush=True)
+        clear_payment_extras(chat_id)
+        with _nav_lock:
+            _payment_timers.pop(chat_id, None)
+        try:
+            show_screen(chat_id, "membership", first_name)
+        except Exception as err:
+            print(f"payment expire restore failed {chat_id}: {err}", flush=True)
+
+    timer = threading.Timer(PAYMENT_TTL_SEC, _expire)
+    timer.daemon = True
+    with _nav_lock:
+        _payment_timers[chat_id] = timer
+    timer.start()
+
+
+def record_member(user, *, source: str = "bot") -> None:
+    try:
+        touch_from_telegram_user(user, source=source)
+    except Exception as err:
+        print(f"record_member failed: {err}", flush=True)
+
+
+def safe_delete(chat_id: int, message_id: int | None) -> None:
+    if not message_id:
         return
     try:
         bot.delete_message(chat_id, message_id)
@@ -206,179 +275,241 @@ def delete_message_safe(chat_id, message_id):
         pass
 
 
-def send_banner(chat_id, image_path, caption, reply_markup=None):
-    caption = (caption or "").strip()
-    photo = photo_file(image_path)
-    if photo is None:
-        msg = bot.send_message(chat_id, caption or "Image missing.", reply_markup=reply_markup)
-        return getattr(msg, "message_id", None)
+def show_screen(chat_id: int, screen: str, first_name: str, delete_message_id: int | None = None) -> bool:
+    """
+    Show one panel for this chat: replace the previous panel if present,
+    then delete the user's command message to keep the chat clean.
+    """
+    # Leaving a payment screen (or switching methods) clears timed QR extras
+    if not screen.startswith("pay:"):
+        cancel_payment_timer(chat_id)
+    else:
+        clear_payment_extras(chat_id)
 
-    msg = bot.send_photo(
-        chat_id,
-        photo,
-        caption=caption[:1024],
-        reply_markup=reply_markup,
-        parse_mode="HTML",
-    )
-    return getattr(msg, "message_id", None)
+    image, caption = screen_payload(screen, first_name)
+    markup = screen_markup(screen)
+    caption = caption[:1024]
+    photo = photo_buf(image)
 
-
-def edit_banner(chat_id, message_id, image_path, caption, reply_markup=None):
-    """Update the existing panel in place. Never deletes."""
-    caption = (caption or "").strip()[:1024]
-    photo = photo_file(image_path)
-    if photo is None or not message_id:
-        return False
-    try:
-        media = types.InputMediaPhoto(media=photo, caption=caption, parse_mode="HTML")
-        bot.edit_message_media(
-            media=media,
-            chat_id=chat_id,
-            message_id=message_id,
-            reply_markup=reply_markup,
-        )
-        return True
-    except Exception as err:
-        err_text = str(err).lower()
-        # Same screen tapped again — treat as success, do not delete/resend
-        if "message is not modified" in err_text or "exactly the same" in err_text:
-            return True
-        print(f"edit_banner failed ({chat_id}/{message_id}): {err}", flush=True)
-        return False
-
-
-def navigate(chat_id, screen, first_name="there", from_back=False, panel_message_id=None):
     with _nav_lock:
-        state = _nav.setdefault(chat_id, {"current": None, "stack": [], "message_id": None})
+        old_id = _last_panel.get(chat_id)
 
-        if from_back:
-            if not state["stack"]:
-                return False
-            screen = state["stack"].pop()
-        elif state["current"] and state["current"] != screen:
-            state["stack"].append(state["current"])
-            if len(state["stack"]) > 12:
-                state["stack"] = state["stack"][-12:]
+    # 1) Prefer editing the existing panel in place
+    ok = False
+    panel_id = old_id
+    if old_id and photo is not None:
+        try:
+            media = types.InputMediaPhoto(photo, caption=caption, parse_mode="HTML")
+            bot.edit_message_media(
+                media=media,
+                chat_id=chat_id,
+                message_id=old_id,
+                reply_markup=markup,
+            )
+            print(f"edited panel /{screen} -> {chat_id} msg={old_id}", flush=True)
+            ok = True
+            panel_id = old_id
+        except Exception as err:
+            print(f"edit_message_media failed /{screen} {chat_id}: {err}", flush=True)
 
-        state["current"] = screen
-        image, caption = screen_content(screen, first_name)
-        markup = main_menu(show_back=bool(state["stack"]))
-        target_id = panel_message_id or state.get("message_id")
+    if not ok and old_id:
+        try:
+            bot.edit_message_caption(
+                caption=caption,
+                chat_id=chat_id,
+                message_id=old_id,
+                reply_markup=markup,
+                parse_mode="HTML",
+            )
+            print(f"edited caption /{screen} -> {chat_id} msg={old_id}", flush=True)
+            ok = True
+            panel_id = old_id
+        except Exception as err:
+            print(f"edit_message_caption failed /{screen} {chat_id}: {err}", flush=True)
+            safe_delete(chat_id, old_id)
+            panel_id = None
 
-        # 1) Prefer editing the current panel (no delete)
-        if target_id and edit_banner(chat_id, target_id, image, caption, reply_markup=markup):
-            state["message_id"] = target_id
-            return True
+    # 2) Send a fresh panel
+    if not ok:
+        new_id = None
+        if photo is not None:
+            try:
+                photo = photo_buf(image)
+                photo_msg = bot.send_photo(
+                    chat_id,
+                    photo,
+                    caption=caption,
+                    reply_markup=markup,
+                    parse_mode="HTML",
+                )
+                new_id = getattr(photo_msg, "message_id", None)
+                ok = True
+                print(f"sent photo /{screen} -> {chat_id}", flush=True)
+            except Exception as err:
+                print(f"send_photo failed /{screen} {chat_id}: {err}", flush=True)
 
-        # 2) No panel yet / edit impossible: send ONE new panel
-        new_id = send_banner(chat_id, image, caption, reply_markup=markup)
-        old_id = state.get("message_id")
-        state["message_id"] = new_id
+        if not ok:
+            try:
+                msg = bot.send_message(chat_id, caption, reply_markup=markup, parse_mode="HTML")
+                new_id = getattr(msg, "message_id", None)
+                ok = True
+                print(f"sent text /{screen} -> {chat_id}", flush=True)
+            except Exception as err:
+                print(f"send_message failed /{screen} {chat_id}: {err}", flush=True)
+                try:
+                    plain = re.sub(r"<[^>]+>", "", caption)
+                    msg = bot.send_message(chat_id, plain or "Welcome to J2026Vault.", reply_markup=markup)
+                    new_id = getattr(msg, "message_id", None)
+                    ok = True
+                except Exception as err2:
+                    print(f"plain fallback failed /{screen} {chat_id}: {err2}", flush=True)
+                    safe_delete(chat_id, delete_message_id)
+                    return False
+        panel_id = new_id
+        if new_id:
+            with _nav_lock:
+                _last_panel[chat_id] = new_id
 
-        # Only remove the old panel after the new one exists (and never in a loop)
-        if old_id and new_id and old_id != new_id:
-            delete_message_safe(chat_id, old_id)
-        return True
+    # Payment screens auto-return to membership after TTL
+    if ok and screen.startswith("pay:"):
+        schedule_payment_expiry(chat_id, first_name)
+
+    safe_delete(chat_id, delete_message_id)
+    return ok
 
 
-def record_member(user):
-    try:
-        touch_from_telegram_user(user)
-    except Exception as err:
-        print(f"record_member failed: {err}", flush=True)
-
-
-def handle_command(message, screen):
-    first_name = message.from_user.first_name or "there"
-    user_cmd_id = message.message_id
+def handle_command(message, screen: str) -> None:
+    user = message.from_user
     chat_id = message.chat.id
-
-    record_member(message.from_user)
-    navigate(chat_id, screen, first_name=first_name)
-    # Delete the user's /command bubble after the panel updates
-    delete_message_safe(chat_id, user_cmd_id)
+    first_name = (user.first_name if user else None) or "there"
+    print(
+        f"cmd /{screen} from {chat_id} (@{getattr(user, 'username', None) or '-'}) text={message.text!r}",
+        flush=True,
+    )
+    record_member(user)
+    ok = show_screen(chat_id, screen, first_name, delete_message_id=message.message_id)
+    print(f"cmd /{screen} -> {'ok' if ok else 'FAIL'} for {chat_id}", flush=True)
 
 
 @bot.message_handler(commands=["start"])
-def start(message):
+def on_start(message):
+    _welcomed.add(message.chat.id)
     handle_command(message, "start")
 
 
 @bot.message_handler(commands=["membership", "pricing", "buy"])
-def membership(message):
+def on_membership(message):
+    _welcomed.add(message.chat.id)
     handle_command(message, "membership")
 
 
 @bot.message_handler(commands=["help"])
-def help_command(message):
+def on_help(message):
+    _welcomed.add(message.chat.id)
     handle_command(message, "help")
 
 
-@bot.message_handler(commands=["members"])
-def members_command(message):
-    """Owner-only quick list of registered members."""
-    record_member(message.from_user)
-    user = {
-        "id": message.from_user.id,
-        "username": message.from_user.username,
-    }
-    if not is_owner_user(user):
-        try:
-            bot.reply_to(message, "Owners only.")
-        except Exception:
-            pass
+@bot.callback_query_handler(func=lambda c: bool(c.data) and c.data.startswith("nav:"))
+def on_nav(call: types.CallbackQuery):
+    screen = (call.data or "").split(":", 1)[-1]
+    if screen not in {"start", "membership", "help"}:
+        bot.answer_callback_query(call.id)
         return
+    user = call.from_user
+    chat_id = call.message.chat.id if call.message else None
+    if not chat_id:
+        bot.answer_callback_query(call.id)
+        return
+    first_name = (user.first_name if user else None) or "there"
+    record_member(user)
+    _welcomed.add(chat_id)
+    with _nav_lock:
+        if call.message and call.message.message_id:
+            _last_panel[chat_id] = call.message.message_id
+    ok = show_screen(chat_id, screen, first_name)
+    bot.answer_callback_query(call.id)
+    print(f"nav {screen} -> {'ok' if ok else 'FAIL'} for {chat_id}", flush=True)
 
+
+@bot.callback_query_handler(func=lambda c: bool(c.data) and c.data.startswith("pay:"))
+def on_pay(call: types.CallbackQuery):
+    method = (call.data or "").split(":", 1)[-1]
+    if method not in PAYMENT_METHODS:
+        bot.answer_callback_query(call.id, text="Unknown payment method")
+        return
+    user = call.from_user
+    chat_id = call.message.chat.id if call.message else None
+    if not chat_id:
+        bot.answer_callback_query(call.id)
+        return
+    first_name = (user.first_name if user else None) or "there"
+    record_member(user)
+    _welcomed.add(chat_id)
+    with _nav_lock:
+        if call.message and call.message.message_id:
+            _last_panel[chat_id] = call.message.message_id
+    label = PAYMENT_METHODS[method]["label"]
+    bot.answer_callback_query(call.id, text=f"Opening {label}…")
+    ok = show_screen(chat_id, f"pay:{method}", first_name)
+    print(f"pay {method} -> {'ok' if ok else 'FAIL'} for {chat_id}", flush=True)
+
+
+@bot.message_handler(commands=["members"])
+def on_members(message):
+    record_member(message.from_user)
+    user = {"id": message.from_user.id, "username": message.from_user.username}
+    if not is_owner_user(user):
+        bot.reply_to(message, "Owners only.")
+        return
     members = list_members()
+    stats = member_stats()
     if not members:
-        text = "No members registered yet.\nPeople appear after they /start the bot or open the Mini App."
-    else:
-        lines = [f"<b>Members ({len(members)})</b>", ""]
-        for m in members[:40]:
-            uname = f"@{m['username']}" if m.get("username") else "—"
-            lines.append(
-                f"• <b>{m.get('name') or 'User'}</b> ({uname})\n"
-                f"  id <code>{m['id']}</code> · {m.get('plan', 'MORTAL')} · reg {m.get('registeredAt', '—')}"
-            )
-        if len(members) > 40:
-            lines.append(f"\n…and {len(members) - 40} more")
-        text = "\n".join(lines)
-    try:
-        bot.reply_to(message, text)
-    except Exception:
-        pass
-    delete_message_safe(message.chat.id, message.message_id)
-
-
-@bot.callback_query_handler(func=lambda call: call.data == "nav:back")
-def on_back(call):
-    first_name = call.from_user.first_name or "there"
-    ok = navigate(
-        call.message.chat.id,
-        None,
-        first_name=first_name,
-        from_back=True,
-        panel_message_id=call.message.message_id,
-    )
-    try:
-        if ok:
-            bot.answer_callback_query(call.id)
-        else:
-            bot.answer_callback_query(call.id, "Nothing to go back to")
-    except Exception:
-        pass
-
-
-@bot.message_handler(func=lambda message: True)
-def default_reply(message):
-    # Don't touch the panel or delete random messages — avoids wipe/resend loops
-    try:
-        bot.reply_to(
-            message,
-            "Use /start, /membership, or /help.",
+        bot.reply_to(message, "No members yet. They appear after /start or Mini App open.")
+        return
+    lines = [
+        f"<b>Members ({stats.get('total', len(members))})</b>",
+        f"Usernames: {stats.get('withUsername', 0)} · New today: {stats.get('newToday', 0)}",
+        "",
+    ]
+    for m in members[:40]:
+        uname = f"@{m['username']}" if m.get("username") else "—"
+        via = m.get("firstSource") or "—"
+        lines.append(
+            f"• <b>{html.escape(str(m.get('name') or 'User'))}</b> ({html.escape(uname)})\n"
+            f"  id <code>{m['id']}</code> · {m.get('plan', 'MORTAL')} · via {html.escape(str(via))} · reg {m.get('registeredAt', '—')}"
         )
-    except Exception:
-        pass
+    if len(members) > 40:
+        lines.append(f"\n…and {len(members) - 40} more")
+    bot.reply_to(message, "\n".join(lines))
+
+
+@bot.message_handler(
+    func=lambda m: bool(m.text) and m.text.strip().lower() in {"start", "help", "membership"}
+)
+def on_plain(message):
+    key = message.text.strip().lower()
+    _welcomed.add(message.chat.id)
+    handle_command(message, key)
+
+
+@bot.message_handler(func=lambda m: True, content_types=["text"])
+def on_other_text(message):
+    if getattr(message.chat, "type", "") != "private":
+        return
+    text = (message.text or "").strip()
+    if not text or text.startswith("/"):
+        return
+    chat_id = message.chat.id
+    if chat_id not in _welcomed:
+        _welcomed.add(chat_id)
+        handle_command(message, "start")
+        return
+    tip = bot.reply_to(
+        message,
+        "Use /start, /membership, or /help.\nOr tap <b>App</b> to open the vault.",
+        parse_mode="HTML",
+    )
+    # Soft cleanup: remove tip + user noise after a moment isn't needed; leave tip.
 
 
 if __name__ == "__main__":
@@ -387,30 +518,78 @@ if __name__ == "__main__":
     print("=" * 40, flush=True)
     print(f"Bot: @{BOT_USERNAME}", flush=True)
     print(f"Mini App: {WEBAPP_URL}", flush=True)
-    print(f"Assets: {ASSETS_DIR}", flush=True)
+    print(f"Folder: {BOT_DIR}", flush=True)
     for label, path in (
         ("welcome", IMG_WELCOME),
         ("premium", IMG_PREMIUM),
         ("help", IMG_HELP),
         ("menu", IMG_MENU),
+        ("paypal-card", PAYMENT_METHODS["paypal"]["card"]),
+        ("cashapp-card", PAYMENT_METHODS["cashapp"]["card"]),
+        ("zelle-card", PAYMENT_METHODS["zelle"]["card"]),
     ):
         print(f"  {label}: {'OK' if path.exists() else 'MISSING'} — {path.name}", flush=True)
-    print(f"Loaded: {Path(__file__).resolve()}", flush=True)
+
+    try:
+        bot.set_my_commands([
+            types.BotCommand("start", "Welcome"),
+            types.BotCommand("membership", "Plans & payments"),
+            types.BotCommand("help", "Commands"),
+        ])
+        print("Bot commands registered", flush=True)
+    except Exception as err:
+        print(f"set_my_commands failed: {err}", flush=True)
+
     try:
         start_members_api(API_TOKEN, host=MEMBERS_API_HOST, port=int(MEMBERS_API_PORT))
         print(f"Members API: http://127.0.0.1:{MEMBERS_API_PORT}", flush=True)
-        print("  (Expose with a tunnel for live Mini App sync, or upload members.json)", flush=True)
     except Exception as err:
-        print(f"Members API failed to start: {err}", flush=True)
+        print(f"Members API failed: {err}", flush=True)
+
+    public_api = str(MEMBERS_API_PUBLIC_URL or "").strip().rstrip("/")
+    if public_api:
+        try:
+            import json as _json
+            from datetime import datetime, timezone
+
+            out = BOT_DIR.parent / "members-api-url.json"
+            out.write_text(
+                _json.dumps(
+                    {
+                        "url": public_api,
+                        "updatedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            print(f"Public members API URL written: {public_api}", flush=True)
+        except Exception as err:
+            print(f"members-api-url.json write failed: {err}", flush=True)
+    else:
+        print(
+            "Tip: set MEMBERS_API_PUBLIC_URL or run ./bot/run-public-api.sh so Mini App users sync live.",
+            flush=True,
+        )
+
+    # Ensure root members.json mirror exists for GitHub Pages
+    try:
+        from members_store import load_store, save_store
+
+        save_store(load_store())
+        print(f"Members mirror: {BOT_DIR.parent / 'members.json'}", flush=True)
+    except Exception as err:
+        print(f"members mirror skipped: {err}", flush=True)
+
+    try:
+        bot.delete_webhook(drop_pending_updates=False)
+    except Exception as err:
+        print(f"delete_webhook skipped: {err}", flush=True)
+
     print("Polling for updates...", flush=True)
     print("Press Ctrl+C to stop.\n", flush=True)
 
-    try:
-        bot.get_updates(offset=-1, timeout=1)
-    except Exception as err:
-        print(f"Startup sync skipped: {err}", flush=True)
-
-    # skip_pending=False avoids an extra getUpdates clash right after another instance stops
     while True:
         try:
             bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=False)
@@ -418,8 +597,7 @@ if __name__ == "__main__":
         except Exception as err:
             msg = str(err)
             if "409" in msg or "Conflict" in msg:
-                print("Another getUpdates session is still closing — retrying in 3s...", flush=True)
-                import time
+                print("getUpdates conflict — retrying in 3s...", flush=True)
                 time.sleep(3)
                 continue
             raise

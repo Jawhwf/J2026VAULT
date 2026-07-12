@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20260712k">
+  <link rel="stylesheet" href="css/styles.css?v=20260712m">
   <link rel="icon" href="assets/pfp.png" type="image/png">
   <link rel="preload" href="assets/j26-logo.svg" as="image" type="image/svg+xml">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -340,12 +340,14 @@
             <button type="button" class="pe-action-btn pe-action-btn--accent" id="profileEditorAddBtn">Add Telegram ID</button>
           </div>
 
+          <div class="pe-stats" id="profileEditorStats" hidden></div>
+
           <div class="empty-state pe-empty" id="profileEditorEmpty" hidden>
             <div class="empty-icon">
               <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
             </div>
             <h3>No members yet</h3>
-            <p>Add someone by Telegram ID, or wait until they open the Mini App /start the bot.</p>
+            <p>Profiles appear when someone presses Start / uses bot commands, or opens the Mini App while the members API is reachable.</p>
           </div>
 
           <div class="profile-editor-list" id="profileEditorList"></div>
@@ -1102,6 +1104,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="js/bundle-tgs-data.js?v=20260712k"></script>
-  <script src="js/app.js?v=20260712k"></script>
+  <script src="js/vault-config.js?v=20260712m"></script>
+  <script src="js/app.js?v=20260712m"></script>
 </body>
 </html>
