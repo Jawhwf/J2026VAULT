@@ -3150,6 +3150,35 @@ body.plans-view .view.active > * {
 }
 .pe-action-btn:active { filter: brightness(1.06); }
 
+.pe-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.pe-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  text-align: center;
+}
+.pe-stat strong {
+  font-size: 18px;
+  font-weight: 800;
+  color: #fff;
+  line-height: 1.1;
+}
+.pe-stat span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted, #9aa3af);
+  text-transform: lowercase;
+}
+
 .profile-editor-list {
   display: flex;
   flex-direction: column;
