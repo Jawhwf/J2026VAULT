@@ -312,6 +312,17 @@ def build_handler(bot_token: str):
                 products = body.get("products")
                 if not isinstance(products, list):
                     return self._json(400, {"ok": False, "error": "products array required"})
+                existing = list_products()
+                # Guard against accidental wipes (failed client payloads / empty PUT)
+                if len(products) == 0 and len(existing) > 0 and not body.get("forceEmpty"):
+                    return self._json(
+                        400,
+                        {
+                            "ok": False,
+                            "error": "Refusing to wipe catalog with an empty list",
+                            "count": len(existing),
+                        },
+                    )
                 store = replace_all_products(products)
                 return self._json(
                     200,
