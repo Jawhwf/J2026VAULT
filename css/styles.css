@@ -1594,6 +1594,12 @@ html, body {
   margin-left: 8px;
 }
 .price-main.free { color: var(--accent-bright); }
+.price-main .price-included {
+  font-size: clamp(14px, 3.4vw, 18px);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
 .share-sm { display: flex; align-items: center; gap: 6px; padding: 9px 15px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-muted); font-size: 13px; font-family: var(--font); cursor: pointer; transition: border-color 0.2s, color 0.2s; }
 .share-sm:hover { border-color: var(--accent-line); color: var(--accent-bright); }
 

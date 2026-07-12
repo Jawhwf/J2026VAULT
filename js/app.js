@@ -131,7 +131,7 @@ function renderProductAuthorLine(product) {
 function renderProductPriceContent(product) {
   if (product.price === 0) return 'Free';
   if (canDownloadProduct(product)) {
-    return '<span class="price-included">Included</span>';
+    return '<span class="price-included">Download ready</span>';
   }
   let html = `$${product.price.toFixed(2)}`;
   if (product.oldPrice) {
@@ -6280,7 +6280,7 @@ function renderCard(product, isBundle = false, context = 'catalog') {
   const price = product.price === 0
     ? `<span class="card-price free">Free</span>`
     : canDownloadProduct(product)
-      ? `<span class="card-price free">Included</span>`
+      ? `<span class="card-price free">Download ready</span>`
       : `<span class="card-price">$${product.price.toFixed(2)}${product.oldPrice ? `<span class="old">$${product.oldPrice.toFixed(2)}</span>` : ''}</span>`;
 
   const footerLeft = context === 'purchases'
