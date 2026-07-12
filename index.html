@@ -7,20 +7,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20260712e">
+  <link rel="stylesheet" href="css/styles.css?v=20260712g">
   <link rel="icon" href="assets/pfp.png" type="image/png">
   <link rel="preload" href="assets/j26-logo.svg" as="image" type="image/svg+xml">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
-    /* Fail closed on public hosts. TEMP: local/file unlocked for editing. */
+    /* Fail closed everywhere: only a real Telegram Mini App session unlocks the UI. */
     (function () {
-      var host = (location.hostname || '').toLowerCase();
-      var protocol = (location.protocol || '').toLowerCase();
-      var local = protocol === 'file:' || host === 'localhost' || host === '127.0.0.1' || host === '::1';
-      if (local) {
-        document.documentElement.classList.add('tg-session-ok');
-        return;
-      }
       try { sessionStorage.removeItem('j2026vault_owner_dev'); } catch (e) {}
       var tg = window.Telegram && window.Telegram.WebApp;
       var inside = !!(tg && tg.initData && String(tg.initData).trim()
@@ -38,6 +31,16 @@
     html:not(.tg-session-ok) #backdrop { visibility: hidden !important; pointer-events: none !important; }
     html:not(.tg-session-ok) #telegramGate { display: flex !important; }
     html.tg-session-ok #telegramGate { display: none !important; }
+    /* Vault Admin chrome is invisible unless JS marks a verified owner session */
+    html:not(.vault-owner-session) #openVaultAdminBtn,
+    html:not(.vault-owner-session) #adminFabBar,
+    html:not(.vault-owner-session) #adminPasswordModal,
+    html:not(.vault-owner-session) #view-admin,
+    html:not(.vault-owner-session) #view-admin-editor {
+      display: none !important;
+      pointer-events: none !important;
+      visibility: hidden !important;
+    }
   </style>
 </head>
 <body class="tg-gate-active">
@@ -1014,7 +1017,7 @@
   </div>
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="js/bundle-tgs-data.js?v=20260712e"></script>
-  <script src="js/app.js?v=20260712e"></script>
+  <script src="js/bundle-tgs-data.js?v=20260712g"></script>
+  <script src="js/app.js?v=20260712g"></script>
 </body>
 </html>
