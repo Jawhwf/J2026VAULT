@@ -1165,6 +1165,7 @@ function normalizeMemberRecord(raw, fallbackUser = null) {
     firstSource: String(src.firstSource || '').toLowerCase() || '',
     seenCount: Math.max(0, Number(src.seenCount) || 0),
     lastSeenAt: src.lastSeenAt ? String(src.lastSeenAt) : null,
+    updatedAt: src.updatedAt ? String(src.updatedAt) : null,
   };
 }
 
@@ -1312,15 +1313,17 @@ function captureOwnProfileFromUi() {
   return normalizeMemberRecord({
     ...local,
     id: getTelegramUserId(telegramUser) ?? local.id,
-    username: getTelegramUsername(telegramUser) || local.username,
+    // Prefer saved / editor username over live Telegram (editor edits must stick)
+    username: local.username || getTelegramUsername(telegramUser) || '',
     name: (nameInput?.value || local.name || 'Vault User').trim().slice(0, 48),
-    photoUrl: (!isData && avatarSrc && !avatarSrc.includes('assets/pfp.png')) ? avatarSrc : (telegramUser?.photo_url || local.photoUrl || ''),
+    photoUrl: (!isData && avatarSrc && !avatarSrc.includes('assets/pfp.png')) ? avatarSrc : (local.photoUrl || telegramUser?.photo_url || ''),
     avatarDataUrl: isData ? avatarSrc : local.avatarDataUrl,
     registeredAt: local.registeredAt || formatRegisteredLabel(new Date()),
     downloads: userStats.downloads,
     purchases: userStats.purchases,
     plan: getActivePlanName(),
     endsAt: subscription.endsAt ? new Date(subscription.endsAt).toISOString() : null,
+    updatedAt: new Date().toISOString(),
   }, telegramUser);
 }
 
@@ -1399,15 +1402,11 @@ function ensureOwnerMembersInCache() {
       changed = true;
       return;
     }
-    // Owners stay HEAVENLY
-    const next = {
-      ...existing,
-      name: existing.name && existing.name !== `User ${seed.id}` ? existing.name : seed.name,
-      username: existing.username || seed.username,
-      plan: 'ETERNAL',
-      endsAt: null,
-    };
-    if (next.plan !== existing.plan || next.name !== existing.name || next.username !== existing.username) {
+    // Only fill missing identity — never overwrite editor-saved plan/name/username/stats
+    const next = { ...existing };
+    if (!next.name || next.name === `User ${seed.id}`) next.name = seed.name || next.name;
+    if (!next.username) next.username = seed.username || next.username;
+    if (next.name !== existing.name || next.username !== existing.username) {
       const idx = membersCache.findIndex(m => Number(m.id) === Number(seed.id));
       if (idx >= 0) membersCache[idx] = normalizeMemberRecord(next);
       changed = true;
@@ -1495,11 +1494,21 @@ function updateProfileEditorStats(stats) {
 
 function mergeMembersLists(a, b) {
   const map = new Map();
+  const stamp = (m) => Date.parse(m?.updatedAt || m?.lastSeenAt || '') || 0;
   [...(a || []), ...(b || [])].forEach(m => {
     const n = normalizeMemberRecord(m);
     if (n.id == null) return;
     const prev = map.get(n.id);
-    map.set(n.id, prev ? { ...prev, ...n } : n);
+    if (!prev) {
+      map.set(n.id, n);
+      return;
+    }
+    const prevT = stamp(prev);
+    const nextT = stamp(n);
+    // Newer record wins; on tie keep fields from both with later list entry preferred
+    if (nextT > prevT) map.set(n.id, { ...prev, ...n });
+    else if (prevT > nextT) map.set(n.id, { ...n, ...prev });
+    else map.set(n.id, { ...prev, ...n });
   });
   return [...map.values()];
 }
@@ -1537,11 +1546,17 @@ async function ensureOwnProfileLoaded() {
     ...(shared || {}),
     registeredAt: shared?.registeredAt || local.registeredAt,
     id: myId ?? local.id,
-    username: getTelegramUsername(telegramUser) || shared?.username || local.username,
-    photoUrl: telegramUser?.photo_url || shared?.photoUrl || local.photoUrl || '',
+    // Registry / editor edits win over live Telegram identity
+    username: shared?.username || local.username || getTelegramUsername(telegramUser) || '',
+    name: shared?.name || local.name || 'Vault User',
+    photoUrl: shared?.photoUrl || local.photoUrl || telegramUser?.photo_url || '',
     avatarDataUrl: (shared?.avatarDataUrl && !isWeakAvatarDataUrl(shared.avatarDataUrl))
       ? shared.avatarDataUrl
       : ((local.avatarDataUrl && !isWeakAvatarDataUrl(local.avatarDataUrl)) ? local.avatarDataUrl : null),
+    plan: shared?.plan || local.plan || 'MORTAL',
+    endsAt: shared?.endsAt ?? local.endsAt ?? null,
+    downloads: shared?.downloads ?? local.downloads ?? 0,
+    purchases: shared?.purchases ?? local.purchases ?? 0,
   }, telegramUser);
 
   writeOwnProfileLocal(merged);
@@ -1876,6 +1891,7 @@ async function saveProfileEditorMember() {
     photoUrl: avatarDataUrl ? '' : photoUrl,
     sources: Array.from(new Set([...(prev.sources || []), 'editor'])),
     firstSource: prev.firstSource || 'editor',
+    updatedAt: new Date().toISOString(),
   });
 
   upsertMemberInCache(member);
@@ -1885,19 +1901,26 @@ async function saveProfileEditorMember() {
     applyProfileRecordToUi({ ...member, _forceName: true });
   }
 
+  let synced = false;
   try {
     await resolveMembersApiUrl();
     if (readMembersApiUrl()) {
       await membersApiFetch(`/api/members/${member.id}`, { method: 'PUT', body: member });
+      // Re-fetch without wiping editor fields (owners are no longer force-reset to HEAVENLY)
       await refreshMembersList();
+      synced = true;
     }
   } catch (e) {
-    if (err) { err.textContent = e?.message || 'Saved locally — API sync failed'; err.hidden = false; }
+    if (err) { err.textContent = e?.message || 'Saved on this device — API sync failed'; err.hidden = false; }
   }
 
   closeProfileEditorSheet();
   renderProfileEditorList();
-  showToast(`${planLabel(member.plan)} · ${member.name} saved`);
+  showToast(
+    synced
+      ? `${planLabel(member.plan)} · ${member.name} saved`
+      : `${planLabel(member.plan)} · ${member.name} saved on this device`
+  );
 }
 
 async function deleteProfileEditorMember(memberId = null) {
