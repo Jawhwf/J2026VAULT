@@ -3281,8 +3281,8 @@ const EDITOR_TEMPLATE = {
   website: '',
   downloadUrl: '',
   deliveryLinks: {},
-  systems: ['photoshop', 'windows', 'apple'],
-  delivery: ['google-drive'],
+  systems: ['windows', 'apple', 'photoshop'],
+  delivery: ['google-drive', 'telegram'],
   tags: ['example', 'bundle', 'leaker'],
   about: '',
   aboutOn: true,
@@ -3507,13 +3507,16 @@ function syncEditorVersionFields(source = editorVersion) {
 function syncEditorCompactInputWidths() {
   const fit = (el, { min = 2, max = 10, pad = 0 } = {}) => {
     if (!el) return;
-    const raw = String(el.value ?? '');
-    const len = Math.max(min, Math.min(max, raw.length + pad));
+    const raw = String(el.value ?? el.placeholder ?? '');
+    const len = Math.max(min, Math.min(max, (raw.length || min) + pad));
     el.style.width = `${len}ch`;
   };
   fit(editorPrice, { min: 3, max: 6, pad: 0 });
-  fit(editorVersion, { min: 2, max: 8, pad: 0 });
-  fit(editorDetailVersion, { min: 2, max: 8, pad: 0 });
+  fit(editorVersion, { min: 3, max: 8, pad: 0 });
+  fit(editorDetailVersion, { min: 3, max: 8, pad: 0 });
+  fit(editorWebsite, { min: 8, max: 16, pad: 0 });
+  fit(editorDownloads, { min: 2, max: 4, pad: 0 });
+  fit(editorFavs, { min: 1, max: 3, pad: 0 });
 }
 
 function closeEditorDetailOsPop() {
@@ -5932,7 +5935,13 @@ function toggleEditorCoverIconPop() {
 }
 
 function renderEditorCoverIcons(systems, delivery) {
-  const deliveries = normalizeDeliveries(delivery);
+  const deliveryOrder = ['google-drive', 'telegram', 'mega'];
+  const systemOrder = ['windows', 'apple', 'photoshop', 'premiere', 'after-effects', 'davinci'];
+  const orderKeys = (keys, order) => {
+    const set = new Set(keys || []);
+    return order.filter(key => set.has(key)).concat([...set].filter(key => !order.includes(key)));
+  };
+  const deliveries = orderKeys(normalizeDeliveries(delivery), deliveryOrder);
   const deliveryItems = deliveries.map(key => {
     const src = DELIVERY_ICONS[key];
     const label = DELIVERY_LABELS[key] || key;
@@ -5941,7 +5950,7 @@ function renderEditorCoverIcons(systems, delivery) {
       <img class="delivery-icon" src="${src}" alt="" loading="lazy">
     </button>`;
   }).join('');
-  const systemItems = (systems || []).map(key => {
+  const systemItems = orderKeys(systems || [], systemOrder).map(key => {
     const src = SYSTEM_ICONS[key];
     const label = SYSTEM_LABELS[key] || key;
     if (!src) return '';

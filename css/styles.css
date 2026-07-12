@@ -866,7 +866,7 @@ html, body {
 .card-body:has(.card-vault-badge) .card-title:not(.editor-post-title-input) {
   padding-right: 88px;
 }
-.card-stats { position: absolute; bottom: 10px; left: 10px; display: flex; gap: 6px; z-index: 2; }
+.card-stats { position: absolute; bottom: 10px; left: 10px; display: flex; gap: 6px; z-index: 2; align-items: center; }
 .stat-pill {
   display: flex; align-items: center; gap: 4px;
   padding: 4px 8px; border-radius: 999px;
@@ -2877,7 +2877,7 @@ body.plans-view .view.active > * {
 }
 #view-admin-editor .editor-flat .editor-post-card-live.card-body {
   background: linear-gradient(180deg, rgba(22, 22, 28, 0.98) 0%, rgba(14, 14, 18, 0.98) 100%);
-  padding: 11px 14px 12px;
+  padding: 11px 12px 12px;
 }
 #view-admin-editor .editor-flat .editor-post-vault-slot .card-vault-badge {
   gap: 6px;
@@ -2917,10 +2917,11 @@ body.plans-view .view.active > * {
 #view-admin-editor .editor-flat .editor-post-version-field {
   width: max-content;
   max-width: max-content;
-  padding: 4px 7px;
+  padding: 3px 6px;
+  margin-left: auto;
 }
 #view-admin-editor .editor-flat .editor-post-version-input {
-  width: 2.75ch;
+  width: 3ch;
   min-width: 2ch;
   max-width: 8ch;
   text-align: left;
@@ -4060,11 +4061,16 @@ body.plans-view .view.active > * {
   background: rgba(255, 255, 255, 0.06);
 }
 .editor-post-price-row {
-  grid-column: 1;
+  grid-column: 1 / -1;
   grid-row: 3;
   align-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
   padding-top: 0;
-  margin-top: 0;
+  margin-top: 2px;
 }
 .editor-post-vault-slot {
   grid-column: 2;
@@ -4077,19 +4083,17 @@ body.plans-view .view.active > * {
   margin-left: 0;
 }
 .editor-post-version-field {
-  grid-column: 2;
-  grid-row: 3;
-  align-self: end;
-  justify-self: end;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 0;
   flex: 0 0 auto;
-  flex-shrink: 0;
   width: max-content;
   max-width: max-content;
   min-width: 0;
-  padding: 4px 7px;
+  margin: 0;
+  margin-left: auto;
+  padding: 3px 6px;
   box-sizing: border-box;
 }
 .editor-post-title-input {
@@ -4161,7 +4165,7 @@ body.plans-view .view.active > * {
   font: inherit;
   field-sizing: content;
   flex: 0 0 auto;
-  width: 2.75ch;
+  width: 3ch;
   min-width: 2ch;
   max-width: 8ch;
   text-align: left;
@@ -4695,9 +4699,13 @@ body.plans-view .view.active > * {
   transform: scale(0.94);
 }
 .editor-cover-stats {
-  z-index: 3;
+  z-index: 6;
   pointer-events: none;
   align-items: center;
+  gap: 6px;
+  right: auto;
+  max-width: calc(100% - 118px);
+  flex-wrap: nowrap;
 }
 .editor-cover-stats-switch {
   display: inline-flex;
@@ -4726,7 +4734,9 @@ body.plans-view .view.active > * {
 .editor-cover-stats-pills {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
+  flex-shrink: 0;
+  margin: 0;
 }
 .editor-cover-stats-pills.is-off {
   opacity: 0.35;
@@ -4735,15 +4745,16 @@ body.plans-view .view.active > * {
 .editor-stat-pill {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   pointer-events: auto;
   flex-shrink: 0;
+  padding: 4px 7px;
 }
 .editor-stat-pill .editor-stat-input {
   field-sizing: content;
-  width: auto;
+  width: 2.4ch;
   min-width: 1.5ch;
-  max-width: 5ch;
+  max-width: 4.5ch;
   padding: 0;
   margin: 0;
   border: none;
@@ -4757,7 +4768,8 @@ body.plans-view .view.active > * {
   appearance: textfield;
 }
 .editor-stat-pill .editor-stat-input--num {
-  max-width: 3.5ch;
+  width: 1.6ch;
+  max-width: 3ch;
   text-align: left;
 }
 .editor-stat-pill .editor-stat-input:hover,
@@ -5262,10 +5274,11 @@ body.plans-view .view.active > * {
 }
 .editor-hero-wrap #editorPreviewIcons {
   position: absolute;
-  right: 10px;
+  right: 8px;
   bottom: 10px;
-  z-index: 3;
+  z-index: 4;
   pointer-events: none;
+  max-width: min(58%, calc(100% - 150px));
 }
 .editor-hero-wrap #editorPreviewIcons > * {
   pointer-events: auto;
@@ -5275,18 +5288,23 @@ body.plans-view .view.active > * {
   flex-direction: column;
   align-items: flex-end;
   gap: 0;
-  max-width: calc(100% - 8px);
+  max-width: 100%;
+  width: max-content;
+  margin-left: auto;
   position: relative;
   z-index: 4;
 }
 .editor-cover-icons-row {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 5px;
   padding: 4px 6px;
   border-radius: 10px;
   background: rgba(8, 8, 11, 0.55);
   backdrop-filter: blur(4px);
+  max-width: 100%;
 }
 .editor-cover-icon-active {
   position: relative;
@@ -5558,22 +5576,23 @@ body.plans-view .view.active > * {
 .editor-detail-editable:focus-within {
   background: rgba(255, 255, 255, 0.02);
 }
-/* Website + Version: shrink-wrap the value cluster on the right */
+/* Website + Version: pin compact clusters to the same right edge as File size */
 #view-admin-editor .editor-flat .editor-details-live .editor-detail-website-row > .editor-detail-value,
 #view-admin-editor .editor-flat .editor-details-live .editor-detail-version-row > .editor-detail-value,
 .editor-detail-website-row .editor-detail-value,
 .editor-detail-version-row .editor-detail-value,
 .editor-detail-version-value {
   display: inline-flex !important;
-  flex: 0 0 auto !important;
+  flex: 1 1 0 !important;
   flex-wrap: nowrap !important;
   align-items: center !important;
   justify-content: flex-end !important;
   gap: 0 !important;
-  width: fit-content !important;
-  max-width: 72% !important;
+  width: auto !important;
+  max-width: 68% !important;
   min-width: 0 !important;
-  margin-left: auto !important;
+  margin-left: 0 !important;
+  text-align: right !important;
 }
 .editor-detail-website-link-wrap,
 .editor-detail-version-inner {
@@ -5581,11 +5600,11 @@ body.plans-view .view.active > * {
   align-items: center;
   justify-content: flex-end;
   flex: 0 0 auto !important;
-  width: fit-content !important;
+  width: max-content !important;
   max-width: 100%;
   min-width: 0;
-  margin: 0 !important;
-  gap: 6px;
+  margin: 0 0 0 auto !important;
+  gap: 5px;
 }
 .editor-detail-version-inner {
   gap: 0;
@@ -5622,9 +5641,9 @@ body.plans-view .view.active > * {
 .editor-detail-website-input {
   flex: 0 0 auto !important;
   field-sizing: content;
-  width: auto !important;
+  width: 12ch !important;
   min-width: 0 !important;
-  max-width: 18ch;
+  max-width: 16ch !important;
   border: none;
   background: transparent;
   color: var(--accent-bright);
@@ -5632,7 +5651,7 @@ body.plans-view .view.active > * {
   font-size: 14px;
   font-weight: 700;
   text-align: left;
-  padding: 0 0 2px;
+  padding: 0;
   margin: 0;
   border-radius: 0;
   transition: color 0.2s;
@@ -5655,6 +5674,7 @@ body.plans-view .view.active > * {
 .editor-detail-website-arrow {
   color: var(--accent-bright);
   flex: 0 0 auto;
+  margin: 0;
 }
 .editor-detail-plain-input {
   min-width: 0;
@@ -5687,9 +5707,9 @@ body.plans-view .view.active > * {
 }
 .editor-detail-version-input {
   flex: 0 0 auto !important;
-  width: 4ch !important;
-  min-width: 3ch !important;
-  max-width: 10ch !important;
+  width: 3ch !important;
+  min-width: 2ch !important;
+  max-width: 8ch !important;
   border: none;
   background: transparent;
   color: var(--text-muted);
