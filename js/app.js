@@ -2,7 +2,8 @@
 
 const DISCORD_INVITE = 'https://discord.gg/J2026Vault';
 const TELEGRAM_LINK = 'https://t.me/J2026Vault';
-const TELEGRAM_BOT_LINK = 'https://t.me/J2026VaultBot';
+const TELEGRAM_BOT_LINK = (window.VAULT_CONFIG && window.VAULT_CONFIG.TELEGRAM_BOT_LINK)
+  || 'https://t.me/J26VaultBot';
 const CHARLEY_PANGUS_LOGO = 'assets/charley-pangus-logo.gif';
 
 /* Vault owners — ONLY these two Telegram accounts can see / unlock Vault Admin.
@@ -1073,6 +1074,45 @@ function writeMembersApiUrl(url) {
   } catch {}
 }
 
+function detectVisitSource() {
+  const tg = window.Telegram?.WebApp;
+  const inside = !!(tg && tg.initData && String(tg.initData).trim()
+    && tg.initDataUnsafe?.user
+    && (tg.initDataUnsafe.user.id || tg.initDataUnsafe.user.username));
+  return inside ? 'webapp' : 'web';
+}
+
+async function resolveMembersApiUrl() {
+  const existing = readMembersApiUrl();
+  if (existing) return existing;
+
+  const fromConfig = String(window.VAULT_CONFIG?.MEMBERS_API_URL || '').trim().replace(/\/$/, '');
+  if (fromConfig) {
+    writeMembersApiUrl(fromConfig);
+    return fromConfig;
+  }
+
+  try {
+    const res = await fetch(`members-api-url.json?t=${Date.now()}`, { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      const url = String(data?.url || '').trim().replace(/\/$/, '');
+      if (url) {
+        writeMembersApiUrl(url);
+        return url;
+      }
+    }
+  } catch {}
+
+  const host = (location.hostname || '').toLowerCase();
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || location.protocol === 'file:') {
+    const local = 'http://127.0.0.1:8765';
+    writeMembersApiUrl(local);
+    return local;
+  }
+  return '';
+}
+
 function profileStorageKey(user = telegramUser) {
   const id = getTelegramUserId(user);
   if (id != null) return `${PROFILE_META_KEY}:id:${id}`;
@@ -1117,6 +1157,10 @@ function normalizeMemberRecord(raw, fallbackUser = null) {
     purchases: Math.max(0, Number(src.purchases) || 0),
     plan: ['MORTAL', 'ACOLYTE', 'ETERNAL'].includes(plan) ? plan : 'MORTAL',
     endsAt: src.endsAt || null,
+    sources: Array.isArray(src.sources) ? src.sources.map(s => String(s || '').toLowerCase()).filter(Boolean) : [],
+    firstSource: String(src.firstSource || '').toLowerCase() || '',
+    seenCount: Math.max(0, Number(src.seenCount) || 0),
+    lastSeenAt: src.lastSeenAt ? String(src.lastSeenAt) : null,
   };
 }
 
@@ -1298,17 +1342,52 @@ async function fetchMembersJsonFile() {
 async function refreshMembersList() {
   membersCache = readMembersCache();
   try {
+    await resolveMembersApiUrl();
     if (readMembersApiUrl()) {
       const data = await membersApiFetch('/api/members');
       if (Array.isArray(data.members)) writeMembersCache(data.members);
+      updateProfileEditorStats(data.stats || computeLocalMemberStats(data.members || membersCache));
+    } else {
+      updateProfileEditorStats(computeLocalMemberStats(membersCache));
     }
   } catch {
     try {
       const list = await fetchMembersJsonFile();
       if (list.length) writeMembersCache(mergeMembersLists(membersCache, list));
     } catch {}
+    updateProfileEditorStats(computeLocalMemberStats(membersCache));
   }
   return membersCache;
+}
+
+function computeLocalMemberStats(members) {
+  const list = members || [];
+  const today = formatRegisteredLabel(new Date());
+  const bySource = {};
+  list.forEach(m => {
+    const key = m.firstSource || (m.sources && m.sources[0]) || 'unknown';
+    bySource[key] = (bySource[key] || 0) + 1;
+  });
+  return {
+    total: list.length,
+    withUsername: list.filter(m => m.username).length,
+    newToday: list.filter(m => m.registeredAt === today).length,
+    bySource,
+  };
+}
+
+function updateProfileEditorStats(stats) {
+  const el = document.getElementById('profileEditorStats');
+  if (!el || !stats) return;
+  const total = Number(stats.total) || 0;
+  const named = Number(stats.withUsername) || 0;
+  const neu = Number(stats.newToday) || 0;
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="pe-stat"><strong>${total}</strong><span>profiles</span></div>
+    <div class="pe-stat"><strong>${named}</strong><span>usernames</span></div>
+    <div class="pe-stat"><strong>${neu}</strong><span>new today</span></div>
+  `;
 }
 
 function mergeMembersLists(a, b) {
@@ -1336,6 +1415,7 @@ async function ensureOwnProfileLoaded() {
   let shared = myId != null ? findMemberInCache(myId) : null;
 
   try {
+    await resolveMembersApiUrl();
     if (readMembersApiUrl()) {
       const data = await membersApiFetch('/api/me');
       if (data.member) {
@@ -1365,17 +1445,40 @@ async function ensureOwnProfileLoaded() {
 
 async function heartbeatOwnProfile() {
   const profile = persistOwnProfileFromUi();
+  const source = detectVisitSource();
   try {
-    if (readMembersApiUrl()) {
-      const data = await membersApiFetch('/api/me/sync', { method: 'POST', body: profile });
+    await resolveMembersApiUrl();
+    if (readMembersApiUrl() && getTelegramInitData()) {
+      const data = await membersApiFetch('/api/me/sync', {
+        method: 'POST',
+        body: { ...profile, source },
+      });
       if (data.member) {
         const remote = normalizeMemberRecord(data.member, telegramUser);
         writeOwnProfileLocal(remote);
         upsertMemberInCache(remote);
         applyProfileRecordToUi({ ...remote, _forceName: true });
       }
+      if (data.stats) updateProfileEditorStats(data.stats);
+    } else {
+      // Still track locally so Profile editor sees this device's users
+      upsertMemberInCache({
+        ...profile,
+        sources: Array.from(new Set([...(profile.sources || []), source])),
+        firstSource: profile.firstSource || source,
+        seenCount: Math.max(1, Number(profile.seenCount || 0) + 1),
+        lastSeenAt: new Date().toISOString(),
+      });
     }
-  } catch {}
+  } catch {
+    upsertMemberInCache({
+      ...profile,
+      sources: Array.from(new Set([...(profile.sources || []), source])),
+      firstSource: profile.firstSource || source,
+      seenCount: Math.max(1, Number(profile.seenCount || 0) + 1),
+      lastSeenAt: new Date().toISOString(),
+    });
+  }
   return profile;
 }
 
@@ -1415,6 +1518,7 @@ function renderProfileEditorList() {
   if (!listEl) return;
   const members = [...membersCache].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   if (subtitle) subtitle.textContent = `${members.length} member${members.length === 1 ? '' : 's'}`;
+  updateProfileEditorStats(computeLocalMemberStats(members));
   listEl.innerHTML = '';
   if (!members.length) {
     if (emptyEl) emptyEl.hidden = false;
@@ -1428,6 +1532,8 @@ function renderProfileEditorList() {
     btn.dataset.memberId = String(member.id);
     const avatar = member.avatarDataUrl || member.photoUrl || 'assets/pfp.png';
     const handle = member.username ? `@${member.username}` : `ID ${member.id}`;
+    const via = member.firstSource || (member.sources && member.sources[0]) || '';
+    const seen = member.lastSeenAt ? ` · seen ${String(member.lastSeenAt).slice(0, 10)}` : '';
     btn.innerHTML = `
       <img class="profile-editor-member-avatar" src="${avatar}" alt="" referrerpolicy="no-referrer">
       <span class="profile-editor-member-copy">
@@ -1440,7 +1546,8 @@ function renderProfileEditorList() {
       </span>
     `;
     btn.querySelector('.profile-editor-member-name').textContent = member.name || handle;
-    btn.querySelector('.profile-editor-member-meta').textContent = `${handle} · joined ${member.registeredAt || '—'}`;
+    btn.querySelector('.profile-editor-member-meta').textContent =
+      `${handle} · joined ${member.registeredAt || '—'}${via ? ` · ${via}` : ''}${seen}`;
     btn.querySelector('.profile-editor-member-plan').textContent = planLabel(member.plan);
     btn.querySelector('.profile-editor-member-days').textContent = memberAccessLabel(member);
     btn.addEventListener('click', () => openProfileEditorSheet(member.id));
