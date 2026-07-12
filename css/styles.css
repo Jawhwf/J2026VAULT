@@ -3054,7 +3054,8 @@ body.plans-view .view.active > * {
   margin-bottom: 0;
 }
 #view-admin-editor .catalog-editor-actions {
-  padding: 10px 0 6px;
+  padding: 4px 0 20px;
+  position: static;
 }
 
 .admin-catalog-card {
@@ -5576,59 +5577,59 @@ body.plans-view .view.active > * {
 .editor-detail-editable:focus-within {
   background: rgba(255, 255, 255, 0.02);
 }
-/* Website + Version: pin compact clusters to the same right edge as File size */
+/* Website + Version: same right edge as File size (text-align on block value) */
 #view-admin-editor .editor-flat .editor-details-live .editor-detail-website-row > .editor-detail-value,
-#view-admin-editor .editor-flat .editor-details-live .editor-detail-version-row > .editor-detail-value,
-.editor-detail-website-row .editor-detail-value,
-.editor-detail-version-row .editor-detail-value,
-.editor-detail-version-value {
-  display: inline-flex !important;
+#view-admin-editor .editor-flat .editor-details-live .editor-detail-version-row > .editor-detail-value {
+  display: block !important;
   flex: 1 1 0 !important;
   flex-wrap: nowrap !important;
-  align-items: center !important;
-  justify-content: flex-end !important;
-  gap: 0 !important;
   width: auto !important;
   max-width: 68% !important;
   min-width: 0 !important;
-  margin-left: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
   text-align: right !important;
+  line-height: 1.25;
 }
 .editor-detail-website-link-wrap,
 .editor-detail-version-inner {
   display: inline-flex !important;
   align-items: center;
   justify-content: flex-end;
-  flex: 0 0 auto !important;
-  width: max-content !important;
+  flex: none !important;
+  width: auto !important;
   max-width: 100%;
   min-width: 0;
-  margin: 0 0 0 auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
   gap: 5px;
+  vertical-align: middle;
+  text-align: right;
 }
 .editor-detail-version-inner {
   gap: 0;
 }
 .editor-detail-author-icon-btn {
-  flex: 0 0 auto !important;
+  flex: none !important;
   margin: 0 !important;
+  vertical-align: middle;
 }
 .editor-detail-author-clear {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   padding: 0;
   margin: 0;
   border: none;
   border-radius: 50%;
   background: transparent;
   color: var(--text-dim);
-  font-size: 18px;
+  font-size: 16px;
   line-height: 1;
   cursor: pointer;
-  flex: 0 0 auto;
+  flex: none;
   transition: color 0.2s, background 0.2s;
 }
 .editor-detail-author-clear[hidden] {
@@ -5639,21 +5640,22 @@ body.plans-view .view.active > * {
   background: rgba(248, 113, 113, 0.12);
 }
 .editor-detail-website-input {
-  flex: 0 0 auto !important;
+  flex: none !important;
   field-sizing: content;
-  width: 12ch !important;
+  width: auto !important;
   min-width: 0 !important;
-  max-width: 16ch !important;
-  border: none;
-  background: transparent;
+  max-width: 18ch !important;
+  border: none !important;
+  background: transparent !important;
   color: var(--accent-bright);
   font-family: var(--font);
   font-size: 14px;
   font-weight: 700;
   text-align: left;
-  padding: 0;
-  margin: 0;
+  padding: 0 !important;
+  margin: 0 !important;
   border-radius: 0;
+  line-height: 1.25;
   transition: color 0.2s;
 }
 .editor-detail-website-input::placeholder {
@@ -5673,8 +5675,9 @@ body.plans-view .view.active > * {
 }
 .editor-detail-website-arrow {
   color: var(--accent-bright);
-  flex: 0 0 auto;
-  margin: 0;
+  flex: none;
+  margin: 0 !important;
+  display: block;
 }
 .editor-detail-plain-input {
   min-width: 0;
@@ -5700,27 +5703,28 @@ body.plans-view .view.active > * {
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 500;
-  line-height: 1;
-  flex: 0 0 auto !important;
-  margin: 0;
-  padding: 0;
+  line-height: 1.25;
+  flex: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 .editor-detail-version-input {
-  flex: 0 0 auto !important;
-  width: 3ch !important;
-  min-width: 2ch !important;
-  max-width: 8ch !important;
-  border: none;
-  background: transparent;
+  flex: none !important;
+  field-sizing: content;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 10ch !important;
+  border: none !important;
+  background: transparent !important;
   color: var(--text-muted);
   font-family: var(--font);
   font-size: 14px;
   font-weight: 500;
   text-align: left;
-  padding: 0;
-  margin: 0;
+  padding: 0 !important;
+  margin: 0 !important;
   border-radius: 0;
-  field-sizing: content;
+  line-height: 1.25;
 }
 .editor-detail-version-input:hover,
 .editor-detail-version-input:focus {
@@ -6605,16 +6609,17 @@ body.plans-view .view.active > * {
   outline: none;
 }
 .catalog-editor-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 3;
-  margin-top: 12px;
+  position: static;
+  bottom: auto;
+  z-index: 1;
+  margin-top: 18px;
+  margin-bottom: 8px;
   flex-shrink: 0;
   width: 100%;
-  padding: 10px var(--pad) 8px;
-  background: rgba(8, 8, 11, 0.96);
-  backdrop-filter: blur(12px);
-  border-top: 1px solid var(--border);
+  padding: 4px 0 12px;
+  background: transparent;
+  backdrop-filter: none;
+  border-top: none;
 }
 .catalog-editor-actions-inner {
   max-width: 560px;

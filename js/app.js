@@ -3507,14 +3507,14 @@ function syncEditorVersionFields(source = editorVersion) {
 function syncEditorCompactInputWidths() {
   const fit = (el, { min = 2, max = 10, pad = 0 } = {}) => {
     if (!el) return;
-    const raw = String(el.value ?? el.placeholder ?? '');
+    const raw = String(el.value || el.placeholder || '');
     const len = Math.max(min, Math.min(max, (raw.length || min) + pad));
-    el.style.width = `${len}ch`;
+    el.style.setProperty('width', `${len}ch`, 'important');
   };
   fit(editorPrice, { min: 3, max: 6, pad: 0 });
   fit(editorVersion, { min: 3, max: 8, pad: 0 });
   fit(editorDetailVersion, { min: 3, max: 8, pad: 0 });
-  fit(editorWebsite, { min: 8, max: 16, pad: 0 });
+  fit(editorWebsite, { min: 10, max: 18, pad: 0 });
   fit(editorDownloads, { min: 2, max: 4, pad: 0 });
   fit(editorFavs, { min: 1, max: 3, pad: 0 });
 }
