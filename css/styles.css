@@ -3284,12 +3284,14 @@ body.plans-view .view.active > * {
 .profile-editor-member-top {
   display: flex;
   align-items: center;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   min-width: 0;
 }
 .profile-editor-member-name {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
+  max-width: 100%;
   font-size: 14px;
   font-weight: 800;
   color: #fff;
@@ -3366,23 +3368,28 @@ body.plans-view .view.active > * {
 .profile-editor-sheet {
   position: absolute;
   inset: 0;
-  z-index: 120;
+  z-index: 80;
   background: rgba(6, 6, 9, 0.78);
   backdrop-filter: blur(6px);
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 16px var(--pad) max(16px, env(safe-area-inset-bottom, 0px));
+  padding: 12px var(--pad) calc(96px + env(safe-area-inset-bottom, 0px));
+  box-sizing: border-box;
 }
 .profile-editor-sheet[hidden] { display: none !important; }
 .profile-editor-sheet-card {
   width: min(100%, 420px);
-  max-height: min(88vh, 640px);
-  overflow: auto;
+  max-height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   background: var(--surface);
   border: 1px solid var(--border-soft);
   border-radius: 18px;
-  padding: 18px 16px 16px;
+  padding: 18px 16px 28px;
+  box-sizing: border-box;
 }
 .profile-editor-sheet-head {
   display: flex;
@@ -3457,6 +3464,7 @@ body.plans-view .view.active > * {
   flex-direction: column;
   gap: 8px;
   margin-top: 16px;
+  padding-bottom: 12px;
 }
 .pe-sheet-actions .admin-pass-submit {
   margin-top: 0;
@@ -3476,6 +3484,9 @@ body.plans-view .view.active > * {
 }
 .pe-remove-btn:active {
   filter: brightness(1.08);
+}
+.pe-remove-btn[hidden] {
+  display: none !important;
 }
 .pe-number-input {
   appearance: auto;

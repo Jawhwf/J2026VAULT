@@ -1341,15 +1341,81 @@ async function fetchMembersJsonFile() {
   return list.map(m => normalizeMemberRecord(m)).filter(m => m.id != null);
 }
 
+function ownerSeedMembers() {
+  return [
+    {
+      id: 6690519994,
+      username: 'J2026Vault',
+      name: 'J2026Vault',
+      plan: 'ETERNAL',
+      endsAt: null,
+      registeredAt: formatRegisteredLabel(new Date()),
+      downloads: 0,
+      purchases: 0,
+      sources: ['editor'],
+      firstSource: 'editor',
+    },
+    {
+      id: 1866326493,
+      username: 'KiseloMlqko',
+      name: 'Yogurt',
+      plan: 'ETERNAL',
+      endsAt: null,
+      registeredAt: formatRegisteredLabel(new Date()),
+      downloads: 0,
+      purchases: 0,
+      sources: ['editor'],
+      firstSource: 'editor',
+    },
+  ].map(m => normalizeMemberRecord(m));
+}
+
+function ensureOwnerMembersInCache() {
+  const seeded = ownerSeedMembers();
+  let changed = false;
+  seeded.forEach(seed => {
+    const existing = findMemberInCache(seed.id);
+    if (!existing) {
+      membersCache.push(seed);
+      changed = true;
+      return;
+    }
+    // Owners stay HEAVENLY
+    const next = {
+      ...existing,
+      name: existing.name && existing.name !== `User ${seed.id}` ? existing.name : seed.name,
+      username: existing.username || seed.username,
+      plan: 'ETERNAL',
+      endsAt: null,
+    };
+    if (next.plan !== existing.plan || next.name !== existing.name || next.username !== existing.username) {
+      const idx = membersCache.findIndex(m => Number(m.id) === Number(seed.id));
+      if (idx >= 0) membersCache[idx] = normalizeMemberRecord(next);
+      changed = true;
+    }
+  });
+  if (changed) writeMembersCache(membersCache);
+  return membersCache;
+}
+
 async function refreshMembersList() {
   membersCache = readMembersCache();
+  ensureOwnerMembersInCache();
   try {
     await resolveMembersApiUrl();
     if (readMembersApiUrl()) {
       const data = await membersApiFetch('/api/members');
-      if (Array.isArray(data.members)) writeMembersCache(data.members);
-      updateProfileEditorStats(data.stats || computeLocalMemberStats(data.members || membersCache));
+      if (Array.isArray(data.members)) {
+        writeMembersCache(mergeMembersLists(membersCache, data.members));
+      }
+      ensureOwnerMembersInCache();
+      updateProfileEditorStats(data.stats || computeLocalMemberStats(membersCache));
     } else {
+      try {
+        const list = await fetchMembersJsonFile();
+        if (list.length) writeMembersCache(mergeMembersLists(membersCache, list));
+      } catch {}
+      ensureOwnerMembersInCache();
       updateProfileEditorStats(computeLocalMemberStats(membersCache));
     }
   } catch {
@@ -1357,6 +1423,7 @@ async function refreshMembersList() {
       const list = await fetchMembersJsonFile();
       if (list.length) writeMembersCache(mergeMembersLists(membersCache, list));
     } catch {}
+    ensureOwnerMembersInCache();
     updateProfileEditorStats(computeLocalMemberStats(membersCache));
   }
   return membersCache;
@@ -1560,7 +1627,17 @@ function renderProfileEditorList() {
   const emptyEl = document.getElementById('profileEditorEmpty');
   const subtitle = document.getElementById('profileEditorSubtitle');
   if (!listEl) return;
-  const members = [...membersCache].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  const members = [...membersCache].sort((a, b) => {
+    const ao = isVaultOwnerMemberId(a.id) ? 0 : 1;
+    const bo = isVaultOwnerMemberId(b.id) ? 0 : 1;
+    if (ao !== bo) return ao - bo;
+    // You (J2026Vault) first, then Yogurt, then everyone else
+    if (Number(a.id) === 6690519994) return -1;
+    if (Number(b.id) === 6690519994) return 1;
+    if (Number(a.id) === 1866326493) return -1;
+    if (Number(b.id) === 1866326493) return 1;
+    return String(a.name || '').localeCompare(String(b.name || ''));
+  });
   if (subtitle) subtitle.textContent = `${members.length} member${members.length === 1 ? '' : 's'}`;
   updateProfileEditorStats(computeLocalMemberStats(members));
   listEl.innerHTML = '';
@@ -1600,7 +1677,6 @@ function renderProfileEditorList() {
           </span>
         </span>
         <span class="profile-editor-member-meta"></span>
-        <span class="profile-editor-member-days" ${showAccess ? '' : 'hidden'}></span>
       </span>
     `;
     btn.querySelector('.profile-editor-member-name').textContent = member.name || handle;
@@ -1609,11 +1685,10 @@ function renderProfileEditorList() {
       isOwnerMember ? 'owner' : null,
       member.registeredAt ? `joined ${member.registeredAt}` : null,
       via || null,
+      showAccess ? access : null,
     ].filter(Boolean);
     btn.querySelector('.profile-editor-member-meta').textContent = metaBits.join(' · ');
     btn.querySelector('.pe-list-plan-label').textContent = planLabel(member.plan);
-    const daysEl = btn.querySelector('.profile-editor-member-days');
-    if (showAccess) daysEl.textContent = access;
     btn.addEventListener('click', () => openProfileEditorSheet(member.id));
 
     const removeBtn = document.createElement('button');
@@ -1678,10 +1753,16 @@ function openProfileEditorSheet(memberId = null) {
     daysInput.value = String(memberDaysLeft(member) ?? 30);
   }
 
-  document.getElementById('peDeleteBtn').hidden = !member;
+  const deleteBtn = document.getElementById('peDeleteBtn');
+  if (deleteBtn) deleteBtn.hidden = !member;
   const err = document.getElementById('peError');
   if (err) { err.hidden = true; err.textContent = ''; }
   sheet.hidden = false;
+  // Keep actions reachable above the bottom nav
+  requestAnimationFrame(() => {
+    const card = sheet.querySelector('.profile-editor-sheet-card');
+    if (card) card.scrollTop = 0;
+  });
 }
 
 function closeProfileEditorSheet() {
