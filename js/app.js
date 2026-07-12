@@ -1156,6 +1156,7 @@ function normalizeMemberRecord(raw, fallbackUser = null) {
     name: String(src.name || base.name || 'Vault User').slice(0, 48),
     photoUrl: String(src.photoUrl || base.photoUrl || '').trim(),
     avatarDataUrl,
+    avatarCustom: !!(src.avatarCustom || src.customAvatar),
     registeredAt: parseRegisteredLabel(src.registeredAt) || base.registeredAt,
     downloads: Math.max(0, Number(src.downloads) || 0),
     purchases: Math.max(0, Number(src.purchases) || 0),
@@ -1267,9 +1268,9 @@ function applyProfileRecordToUi(profile, { syncName = true } = {}) {
 
   const avatar = document.getElementById('profileAvatar');
   if (avatar) {
-    const src = profile.avatarDataUrl || profile.photoUrl || avatar.src || 'assets/pfp.png';
+    const src = memberAvatarSrc(profile);
     avatar.src = src;
-    if (profile.photoUrl) avatar.referrerPolicy = 'no-referrer';
+    if (profile.photoUrl || src.startsWith('http')) avatar.referrerPolicy = 'no-referrer';
   }
 
   if (syncName) {
@@ -1318,6 +1319,7 @@ function captureOwnProfileFromUi() {
     name: (nameInput?.value || local.name || 'Vault User').trim().slice(0, 48),
     photoUrl: (!isData && avatarSrc && !avatarSrc.includes('assets/pfp.png')) ? avatarSrc : (local.photoUrl || telegramUser?.photo_url || ''),
     avatarDataUrl: isData ? avatarSrc : local.avatarDataUrl,
+    avatarCustom: !!local.avatarCustom,
     registeredAt: local.registeredAt || formatRegisteredLabel(new Date()),
     downloads: userStats.downloads,
     purchases: userStats.purchases,
@@ -1550,9 +1552,16 @@ async function ensureOwnProfileLoaded() {
     username: shared?.username || local.username || getTelegramUsername(telegramUser) || '',
     name: shared?.name || local.name || 'Vault User',
     photoUrl: shared?.photoUrl || local.photoUrl || telegramUser?.photo_url || '',
-    avatarDataUrl: (shared?.avatarDataUrl && !isWeakAvatarDataUrl(shared.avatarDataUrl))
-      ? shared.avatarDataUrl
-      : ((local.avatarDataUrl && !isWeakAvatarDataUrl(local.avatarDataUrl)) ? local.avatarDataUrl : null),
+    avatarCustom: !!(shared?.avatarCustom || local.avatarCustom),
+    avatarDataUrl: (shared?.avatarCustom || local.avatarCustom)
+      ? ((shared?.avatarDataUrl && !isWeakAvatarDataUrl(shared.avatarDataUrl))
+        ? shared.avatarDataUrl
+        : ((local.avatarDataUrl && !isWeakAvatarDataUrl(local.avatarDataUrl)) ? local.avatarDataUrl : null))
+      : ((shared?.avatarDataUrl && !isWeakAvatarDataUrl(shared.avatarDataUrl))
+        ? shared.avatarDataUrl
+        : ((local.avatarDataUrl && !isWeakAvatarDataUrl(local.avatarDataUrl))
+          ? local.avatarDataUrl
+          : null)),
     plan: shared?.plan || local.plan || 'MORTAL',
     endsAt: shared?.endsAt ?? local.endsAt ?? null,
     downloads: shared?.downloads ?? local.downloads ?? 0,
@@ -1569,11 +1578,14 @@ async function heartbeatOwnProfile() {
   const profile = persistOwnProfileFromUi();
   const source = detectVisitSource();
   const photoUrl = String(telegramUser?.photo_url || profile.photoUrl || '').trim();
+  const isCustom = !!profile.avatarCustom;
   const payload = {
     ...profile,
     source,
     photoUrl,
-    avatarDataUrl: (profile.avatarDataUrl && !isWeakAvatarDataUrl(profile.avatarDataUrl))
+    avatarCustom: isCustom,
+    // Only send a locked custom upload; otherwise the API re-fetches Telegram PFP
+    avatarDataUrl: (isCustom && profile.avatarDataUrl && !isWeakAvatarDataUrl(profile.avatarDataUrl))
       ? profile.avatarDataUrl
       : null,
   };
@@ -6944,6 +6956,7 @@ document.getElementById('avatarInput').addEventListener('change', e => {
     document.getElementById('profileAvatar').src = dataUrl;
     const local = captureOwnProfileFromUi();
     local.avatarDataUrl = dataUrl;
+    local.avatarCustom = true; // lock — don't overwrite with Telegram on sync
     writeOwnProfileLocal(local);
     upsertMemberInCache(local);
     heartbeatOwnProfile();
@@ -7018,6 +7031,7 @@ async function initApp() {
   initAccentThemePicker();
 
   // Load accurate registration + shared member overrides, then heartbeat
+  // (heartbeat re-fetches Telegram PFP unless a custom Mini App upload is locked)
   Promise.resolve()
     .then(() => ensureOwnProfileLoaded())
     .then(() => heartbeatOwnProfile())
