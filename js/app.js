@@ -6757,6 +6757,61 @@ if (carEl) {
   }, { passive: true });
 }
 
+/* ── Accent theme (profile appearance) ── */
+function getSavedAccentThemeId() {
+  try {
+    return localStorage.getItem(window.VAULT_ACCENT_STORAGE_KEY || 'j2026vault_accent_theme') || 'violet';
+  } catch {
+    return 'violet';
+  }
+}
+
+function syncAccentThemeUi(themeId) {
+  const themes = window.VAULT_ACCENT_THEMES || {};
+  const theme = themes[themeId] || themes.violet;
+  const label = document.getElementById('themeAccentLabel');
+  if (label && theme) label.textContent = theme.label;
+  document.querySelectorAll('#themeSwatches .theme-swatch').forEach(btn => {
+    const active = btn.dataset.theme === (theme?.id || 'violet');
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
+}
+
+function setAccentTheme(themeId, { toast = false } = {}) {
+  const apply = window.applyVaultAccentTheme;
+  const theme = typeof apply === 'function'
+    ? apply(themeId, { persist: true })
+    : null;
+  syncAccentThemeUi(theme?.id || themeId);
+  if (toast && theme) showToast(`${theme.label} accent`);
+  return theme;
+}
+
+function initAccentThemePicker() {
+  const host = document.getElementById('themeSwatches');
+  if (!host || host.dataset.ready === '1') {
+    syncAccentThemeUi(getSavedAccentThemeId());
+    return;
+  }
+  const themes = window.VAULT_ACCENT_THEMES || {};
+  host.innerHTML = '';
+  Object.values(themes).forEach(theme => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'theme-swatch';
+    btn.dataset.theme = theme.id;
+    btn.setAttribute('role', 'option');
+    btn.setAttribute('aria-label', theme.label);
+    btn.innerHTML = `<span class="theme-swatch-dot" style="--swatch:${theme.accent}"></span><span class="theme-swatch-label"></span>`;
+    btn.querySelector('.theme-swatch-label').textContent = theme.label;
+    btn.addEventListener('click', () => setAccentTheme(theme.id, { toast: true }));
+    host.appendChild(btn);
+  });
+  host.dataset.ready = '1';
+  setAccentTheme(getSavedAccentThemeId(), { toast: false });
+}
+
 /* ── Profile avatar (PNG / GIF) ── */
 let avatarObjectUrl = null;
 const profileNameInput = document.getElementById('profileNameInput');
@@ -6878,6 +6933,7 @@ async function initApp() {
   applyVaultAdminAccess();
   await loadCatalogProducts();
   loadProfileName();
+  initAccentThemePicker();
 
   // Load accurate registration + shared member overrides, then heartbeat
   Promise.resolve()
