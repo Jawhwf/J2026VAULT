@@ -260,50 +260,18 @@ def schedule_payment_expiry(chat_id: int, first_name: str) -> None:
 
 def record_member(user, *, source: str = "bot") -> None:
     try:
+        from avatars import fetch_profile_photo_data_url
+
         patch_extra = {}
         user_id = int(getattr(user, "id", 0) or 0)
         if user_id > 0:
-            avatar = fetch_telegram_avatar_data_url(user_id)
+            avatar = fetch_profile_photo_data_url(API_TOKEN, user_id)
             if avatar:
                 patch_extra["avatarDataUrl"] = avatar
+                patch_extra["photoUrl"] = ""
         touch_from_telegram_user(user, source=source, **patch_extra)
     except Exception as err:
         print(f"record_member failed: {err}", flush=True)
-
-
-def fetch_telegram_avatar_data_url(user_id: int) -> str | None:
-    """Download the user's Telegram profile photo as a small JPEG data URL."""
-    try:
-        photos = bot.get_user_profile_photos(user_id, limit=1)
-        if not photos or not getattr(photos, "total_count", 0):
-            return None
-        rows = getattr(photos, "photos", None) or []
-        if not rows or not rows[0]:
-            return None
-        best = rows[0][-1]
-        file_info = bot.get_file(best.file_id)
-        raw = bot.download_file(file_info.file_path)
-        if not raw:
-            return None
-        try:
-            from PIL import Image
-
-            im = Image.open(BytesIO(raw)).convert("RGB")
-            im.thumbnail((256, 256))
-            out = BytesIO()
-            im.save(out, format="JPEG", quality=82, optimize=True)
-            import base64
-
-            b64 = base64.b64encode(out.getvalue()).decode("ascii")
-            return f"data:image/jpeg;base64,{b64}"
-        except Exception:
-            import base64
-
-            b64 = base64.b64encode(raw).decode("ascii")
-            return f"data:image/jpeg;base64,{b64}"
-    except Exception as err:
-        print(f"avatar fetch failed {user_id}: {err}", flush=True)
-        return None
 
 
 def safe_delete(chat_id: int, message_id: int | None) -> None:

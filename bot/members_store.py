@@ -127,12 +127,17 @@ def normalize_member(raw: dict | None, *, fallback_id: int | None = None) -> dic
     last_seen = str(raw.get("lastSeenAt") or "").strip() or None
     sources = _normalize_sources(raw.get("sources"))
 
+    avatar_raw = str(raw.get("avatarDataUrl") or "").strip() or None
+    # Ignore tiny/corrupt placeholder data-URLs from earlier bad fetches
+    if avatar_raw and (not avatar_raw.startswith("data:image") or len(avatar_raw) < 2000):
+        avatar_raw = None
+
     return {
         "id": member_id,
         "username": str(raw.get("username") or "").lstrip("@").strip(),
         "name": str(raw.get("name") or "").strip() or f"User {member_id}",
         "photoUrl": str(raw.get("photoUrl") or "").strip(),
-        "avatarDataUrl": str(raw.get("avatarDataUrl") or "").strip() or None,
+        "avatarDataUrl": avatar_raw,
         "registeredAt": registered,
         "downloads": downloads,
         "purchases": purchases,

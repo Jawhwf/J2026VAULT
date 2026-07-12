@@ -17,6 +17,7 @@ from members_store import (
     replace_all_members,
     upsert_member,
 )
+from avatars import fetch_profile_photo_data_url
 
 OWNER_IDS = {6690519994, 1866326493}
 OWNER_USERNAMES = {"j2026vault", "kiselomlqko", "yogurt"}
@@ -157,23 +158,38 @@ def build_handler(bot_token: str):
                 source = str(body.get("source") or "webapp").strip().lower()
                 if source not in {"bot", "webapp", "web", "editor", "manual"}:
                     source = "webapp"
+                uid = int(user["id"])
+                photo_url = str(body.get("photoUrl") or user.get("photo_url") or "").strip()
                 patch = {
-                    "id": int(user["id"]),
+                    "id": uid,
                     "username": user.get("username") or "",
                     "name": body.get("name")
                     or f"{user.get('first_name', '')} {user.get('last_name', '')}".strip()
                     or (f"@{user.get('username')}" if user.get("username") else f"User {user['id']}"),
-                    "photoUrl": body.get("photoUrl") or user.get("photo_url") or "",
+                    "photoUrl": photo_url,
                 }
-                for key in ("downloads", "purchases", "avatarDataUrl", "registeredAt"):
+                for key in ("downloads", "purchases", "registeredAt"):
                     if key in body:
                         patch[key] = body[key]
+
+                # Prefer a real Telegram photo: body avatar, else fetch from Bot API
+                avatar = str(body.get("avatarDataUrl") or "").strip()
+                if avatar.startswith("data:image") and len(avatar) >= 2000:
+                    patch["avatarDataUrl"] = avatar
+                else:
+                    fetched = fetch_profile_photo_data_url(bot_token, uid)
+                    if fetched:
+                        patch["avatarDataUrl"] = fetched
+                        patch["photoUrl"] = photo_url or ""
+                    elif photo_url:
+                        patch["photoUrl"] = photo_url
+
                 if is_owner_user(user) and "plan" in body:
                     patch["plan"] = body.get("plan")
                     if "endsAt" in body:
                         patch["endsAt"] = body.get("endsAt")
                 store = upsert_member(patch, touch=True, source=source)
-                member = get_member(int(user["id"]))
+                member = get_member(uid)
                 return self._json(
                     200,
                     {
@@ -192,6 +208,33 @@ def build_handler(bot_token: str):
                     return self._json(400, {"ok": False, "error": "Invalid member"})
                 upsert_member(member)
                 return self._json(200, {"ok": True, "member": get_member(member["id"]), "members": list_members()})
+
+            # POST /api/members/<id>/refresh-avatar
+            parts = [p for p in path.split("/") if p]
+            if len(parts) >= 3 and parts[-1] == "refresh-avatar":
+                if not is_owner_user(user):
+                    return self._json(403, {"ok": False, "error": "Owners only"})
+                try:
+                    member_id = int(parts[-2])
+                except ValueError:
+                    return self._json(400, {"ok": False, "error": "Invalid id"})
+                avatar = fetch_profile_photo_data_url(bot_token, member_id)
+                if not avatar:
+                    return self._json(
+                        404,
+                        {
+                            "ok": False,
+                            "error": "No Telegram photo yet — they must /start the bot or open the Mini App",
+                        },
+                    )
+                upsert_member(
+                    {"id": member_id, "avatarDataUrl": avatar, "photoUrl": ""},
+                    source="editor",
+                )
+                return self._json(
+                    200,
+                    {"ok": True, "member": get_member(member_id), "members": list_members()},
+                )
 
             return self._json(404, {"ok": False, "error": "Not found"})
 
@@ -212,6 +255,31 @@ def build_handler(bot_token: str):
                 return self._json(200, {"ok": True, "count": len(store.get("members") or []), "members": list_members()})
 
             if path.startswith("/api/members/") or path.startswith("/members/"):
+                parts = [p for p in path.split("/") if p]
+                # /api/members/<id>/refresh-avatar
+                if len(parts) >= 3 and parts[-1] == "refresh-avatar":
+                    try:
+                        member_id = int(parts[-2])
+                    except ValueError:
+                        return self._json(400, {"ok": False, "error": "Invalid id"})
+                    avatar = fetch_profile_photo_data_url(bot_token, member_id)
+                    if not avatar:
+                        return self._json(
+                            404,
+                            {
+                                "ok": False,
+                                "error": "No Telegram photo yet — they must /start the bot or open the Mini App",
+                            },
+                        )
+                    upsert_member(
+                        {"id": member_id, "avatarDataUrl": avatar, "photoUrl": ""},
+                        source="editor",
+                    )
+                    return self._json(
+                        200,
+                        {"ok": True, "member": get_member(member_id), "members": list_members()},
+                    )
+
                 tail = path.split("/")[-1]
                 try:
                     member_id = int(tail)
