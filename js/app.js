@@ -4563,7 +4563,7 @@ const SCAN_PAY_METHODS = {
   paypal: {
     label: 'PayPal',
     icon: 'assets/payment-icons/paypal.gif',
-    qr: 'assets/payment-icons/paypal-qr.jpg',
+    qr: 'assets/payment-icons/paypal-qr.png',
     qrAlt: 'PayPal payment QR code',
     sub: 'Open PayPal and scan this code to complete your payment.',
     theme: 'paypal',
@@ -4661,8 +4661,38 @@ function openScanPayQrModal(method) {
     frame.hidden = addressOnly || stripeOnly || !config.qr;
   }
   if (qr && config.qr) {
-    qr.src = config.qr;
+    const candidates = [];
+    const pushUnique = (src) => {
+      if (!src || candidates.includes(src)) return;
+      candidates.push(src);
+    };
+    pushUnique(config.qr);
+    if (config.qr.endsWith('.jpg')) pushUnique(config.qr.replace(/\.jpg$/, '.png'));
+    if (config.qr.endsWith('.png')) pushUnique(config.qr.replace(/\.png$/, '.jpg'));
+    // Absolute Pages URL — survives relative-path / stale-host issues in Telegram
+    if ((config.qr || '').includes('paypal-qr')) {
+      pushUnique('https://jawhwf.github.io/J2026VAULT/assets/payment-icons/paypal-qr.png');
+    }
+    if ((config.qr || '').includes('zelle-qr')) {
+      pushUnique('https://jawhwf.github.io/J2026VAULT/assets/payment-icons/zelle-qr.png');
+    }
+    if ((config.qr || '').includes('cashapp-qr')) {
+      pushUnique('https://jawhwf.github.io/J2026VAULT/assets/payment-icons/cashapp-qr.svg');
+    }
+
+    let idx = 0;
+    const versioned = (src) => {
+      if (src.startsWith('data:') || src.startsWith('https://')) return src;
+      return `${src}${src.includes('?') ? '&' : '?'}v=20260712d`;
+    };
+    const tryNext = () => {
+      if (idx >= candidates.length) return;
+      const src = versioned(candidates[idx++]);
+      qr.onerror = tryNext;
+      qr.src = src;
+    };
     qr.alt = config.qrAlt || 'Payment QR code';
+    tryNext();
   }
   if (addressRow && addressText) {
     if (config.address) {
