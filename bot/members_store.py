@@ -138,6 +138,8 @@ def normalize_member(raw: dict | None, *, fallback_id: int | None = None) -> dic
         "name": str(raw.get("name") or "").strip() or f"User {member_id}",
         "photoUrl": str(raw.get("photoUrl") or "").strip(),
         "avatarDataUrl": avatar_raw,
+        # True only when the user uploaded a custom PNG/GIF in the Mini App
+        "avatarCustom": bool(raw.get("avatarCustom")),
         "registeredAt": registered,
         "downloads": downloads,
         "purchases": purchases,
@@ -184,6 +186,9 @@ def upsert_member(patch: dict, *, create_registered: bool = True, touch: bool = 
                 normalized["avatarDataUrl"] = prev["avatarDataUrl"]
         elif not patch.get("avatarDataUrl"):
             normalized["avatarDataUrl"] = None
+
+        if "avatarCustom" not in patch:
+            normalized["avatarCustom"] = bool(prev.get("avatarCustom"))
 
         if "photoUrl" not in patch:
             if not normalized.get("photoUrl") and prev.get("photoUrl"):

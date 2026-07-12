@@ -17,6 +17,8 @@ from members_store import (
     replace_all_members,
     upsert_member,
 )
+from catalog_store import list_products, replace_all_products
+from accent_store import load_accent, set_accent, VALID_THEMES
 from avatars import fetch_profile_photo_data_url
 
 OWNER_IDS = {6690519994, 1866326493}
@@ -118,6 +120,16 @@ def build_handler(bot_token: str):
             if path in ("/api/health", "/health"):
                 return self._json(200, {"ok": True, "service": "j2026vault-members"})
 
+            # Public catalog read (same data mirrored to products.json for Pages)
+            if path in ("/api/catalog", "/catalog", "/api/products", "/products"):
+                products = list_products()
+                return self._json(200, {"ok": True, "count": len(products), "products": products})
+
+            # Public accent theme (shared across Telegram / browser / local via mirror file)
+            if path in ("/api/accent", "/accent", "/api/theme", "/theme"):
+                data = load_accent()
+                return self._json(200, {"ok": True, **data})
+
             user = self._auth_user()
             if not user:
                 return self._json(401, {"ok": False, "error": "Unauthorized"})
@@ -154,6 +166,14 @@ def build_handler(bot_token: str):
                 return self._json(401, {"ok": False, "error": "Unauthorized"})
             body = self._read_json()
 
+            # Any authenticated Mini App user can save the shared accent theme
+            if path in ("/api/accent", "/accent", "/api/theme", "/theme"):
+                theme = str(body.get("theme") or body.get("id") or "").strip().lower()
+                if theme not in VALID_THEMES:
+                    return self._json(400, {"ok": False, "error": "Invalid theme", "allowed": sorted(VALID_THEMES)})
+                data = set_accent(theme)
+                return self._json(200, {"ok": True, **data})
+
             if path in ("/api/me/sync", "/me/sync", "/api/heartbeat", "/heartbeat"):
                 source = str(body.get("source") or "webapp").strip().lower()
                 if source not in {"bot", "webapp", "web", "editor", "manual"}:
@@ -172,11 +192,15 @@ def build_handler(bot_token: str):
                     if key in body:
                         patch[key] = body[key]
 
-                # Prefer a real Telegram photo: body avatar, else fetch from Bot API
+                # Custom Mini App upload sticks; otherwise always refresh from Telegram
+                # so PFP changes in Telegram show up on the next Mini App open.
+                avatar_custom = bool(body.get("avatarCustom") or body.get("customAvatar"))
                 avatar = str(body.get("avatarDataUrl") or "").strip()
-                if avatar.startswith("data:image") and len(avatar) >= 2000:
+                if avatar_custom and avatar.startswith("data:image") and len(avatar) >= 2000:
                     patch["avatarDataUrl"] = avatar
+                    patch["avatarCustom"] = True
                 else:
+                    patch["avatarCustom"] = False
                     fetched = fetch_profile_photo_data_url(bot_token, uid)
                     if fetched:
                         patch["avatarDataUrl"] = fetched
@@ -209,15 +233,40 @@ def build_handler(bot_token: str):
                 upsert_member(member)
                 return self._json(200, {"ok": True, "member": get_member(member["id"]), "members": list_members()})
 
+            # POST /api/me/refresh-avatar — any user can refresh their own Telegram PFP
+            if path in ("/api/me/refresh-avatar", "/me/refresh-avatar"):
+                uid = int(user["id"])
+                avatar = fetch_profile_photo_data_url(bot_token, uid)
+                if not avatar:
+                    return self._json(
+                        404,
+                        {
+                            "ok": False,
+                            "error": "No Telegram photo found — set a profile photo in Telegram, then reopen",
+                        },
+                    )
+                upsert_member(
+                    {
+                        "id": uid,
+                        "avatarDataUrl": avatar,
+                        "photoUrl": "",
+                        "avatarCustom": False,
+                    },
+                    touch=True,
+                    source="webapp",
+                )
+                return self._json(200, {"ok": True, "member": get_member(uid)})
+
             # POST /api/members/<id>/refresh-avatar
             parts = [p for p in path.split("/") if p]
             if len(parts) >= 3 and parts[-1] == "refresh-avatar":
-                if not is_owner_user(user):
-                    return self._json(403, {"ok": False, "error": "Owners only"})
                 try:
                     member_id = int(parts[-2])
                 except ValueError:
                     return self._json(400, {"ok": False, "error": "Invalid id"})
+                # Owners can refresh anyone; members can only refresh themselves
+                if not is_owner_user(user) and int(user["id"]) != member_id:
+                    return self._json(403, {"ok": False, "error": "Owners only"})
                 avatar = fetch_profile_photo_data_url(bot_token, member_id)
                 if not avatar:
                     return self._json(
@@ -228,7 +277,12 @@ def build_handler(bot_token: str):
                         },
                     )
                 upsert_member(
-                    {"id": member_id, "avatarDataUrl": avatar, "photoUrl": ""},
+                    {
+                        "id": member_id,
+                        "avatarDataUrl": avatar,
+                        "photoUrl": "",
+                        "avatarCustom": False,
+                    },
                     source="editor",
                 )
                 return self._json(
@@ -254,6 +308,16 @@ def build_handler(bot_token: str):
                 store = replace_all_members(members)
                 return self._json(200, {"ok": True, "count": len(store.get("members") or []), "members": list_members()})
 
+            if path in ("/api/catalog", "/catalog", "/api/products", "/products"):
+                products = body.get("products")
+                if not isinstance(products, list):
+                    return self._json(400, {"ok": False, "error": "products array required"})
+                store = replace_all_products(products)
+                return self._json(
+                    200,
+                    {"ok": True, "count": len(store.get("products") or []), "products": list_products()},
+                )
+
             if path.startswith("/api/members/") or path.startswith("/members/"):
                 parts = [p for p in path.split("/") if p]
                 # /api/members/<id>/refresh-avatar
@@ -272,7 +336,12 @@ def build_handler(bot_token: str):
                             },
                         )
                     upsert_member(
-                        {"id": member_id, "avatarDataUrl": avatar, "photoUrl": ""},
+                        {
+                            "id": member_id,
+                            "avatarDataUrl": avatar,
+                            "photoUrl": "",
+                            "avatarCustom": False,
+                        },
                         source="editor",
                     )
                     return self._json(
