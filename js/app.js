@@ -130,6 +130,9 @@ function renderProductAuthorLine(product) {
 
 function renderProductPriceContent(product) {
   if (product.price === 0) return 'Free';
+  if (canDownloadProduct(product)) {
+    return '<span class="price-included">Included</span>';
+  }
   let html = `$${product.price.toFixed(2)}`;
   if (product.oldPrice) {
     html += `<span class="old">$${product.oldPrice.toFixed(2)}</span>`;
@@ -2294,6 +2297,7 @@ function updatePremiumUI() {
       btn.hidden = false;
       btn.textContent = 'Get Premium';
     }
+    refreshCatalogAccessUI();
     return;
   }
 
@@ -2310,6 +2314,28 @@ function updatePremiumUI() {
     btn.hidden = isMaxPlan;
     if (!isMaxPlan) btn.textContent = 'Upgrade Plan';
   }
+  refreshCatalogAccessUI();
+}
+
+function refreshCatalogAccessUI() {
+  if (currentProduct) {
+    const priceEl = document.getElementById('productPrice');
+    if (priceEl) {
+      priceEl.innerHTML = renderProductPriceContent(currentProduct);
+      priceEl.classList.toggle('free', currentProduct.price === 0 || canDownloadProduct(currentProduct));
+    }
+    refreshBuyButton(currentProduct);
+    const subBtn = document.getElementById('subAccessBtn');
+    if (subBtn) {
+      const lockedHeavenly = isHeavenlyOnlyLocked(currentProduct);
+      subBtn.style.display = lockedHeavenly ? 'flex' : 'none';
+      if (lockedHeavenly) {
+        subBtn.innerHTML = '<span class="sub-icon" aria-hidden="true"></span>Get HEAVENLY to download';
+      }
+    }
+  }
+  filterProducts();
+  renderBundles();
 }
 
 /* Profile counters — start at zero, no localStorage */
@@ -2334,7 +2360,7 @@ function getProductAccessTier(product) {
   return product.price > 0 ? 'premium' : 'free';
 }
 
-const PLAN_RANK = { MORTAL: 0, ACOLYTE: 1, ETERNAL: 2 };
+const PLAN_RANK = { MORTAL: 0, ACOLYTE: 1, ETERNAL: 2 }; // kept for plan comparisons / future filters
 
 function getProductRequiredPlan(product) {
   if (product.planRequired) return product.planRequired;
@@ -2344,19 +2370,41 @@ function getProductRequiredPlan(product) {
   return 'ACOLYTE';
 }
 
+function hasCatalogUnlock(product) {
+  return !!(product && (owned.has(product.id) || library.has(product.id)));
+}
+
+function isHeavenlySubscriber(planKey = getActivePlanName()) {
+  return planKey === 'ETERNAL';
+}
+
+/** Subscription includes this listing (no checkout). HEAVENLY unlocks everything. */
 function canAccessWithPlan(product, planKey = getActivePlanName()) {
+  if (!product) return false;
+  if (hasCatalogUnlock(product)) return true;
   const tier = getProductAccessTier(product);
-  if (tier === 'free') return true;
-  if (owned.has(product.id) || library.has(product.id)) return true;
-  return PLAN_RANK[planKey] >= PLAN_RANK[getProductRequiredPlan(product)];
+  if (tier === 'free' || !(Number(product.price) > 0)) return true;
+  return isHeavenlySubscriber(planKey);
 }
 
 function canDownloadProduct(product) {
-  const tier = getProductAccessTier(product);
-  if (tier === 'free') return true;
-  if (owned.has(product.id) || library.has(product.id)) return true;
-  if (tier === 'bundle') return false;
   return canAccessWithPlan(product);
+}
+
+/** Paid Leaker/Lurker listings can be bought; HEAVENLY-gated posts cannot (view / upgrade only). */
+function canPurchaseProduct(product) {
+  if (!product) return false;
+  if (canDownloadProduct(product)) return false;
+  if (getProductRequiredPlan(product) === 'ETERNAL') return false;
+  const tier = getProductAccessTier(product);
+  return tier === 'bundle' || isPaid(product);
+}
+
+function isHeavenlyOnlyLocked(product) {
+  return !!product
+    && getProductRequiredPlan(product) === 'ETERNAL'
+    && !canDownloadProduct(product)
+    && !canPurchaseProduct(product);
 }
 
 const PLAN_BADGE_META = {
@@ -6231,7 +6279,9 @@ function renderCard(product, isBundle = false, context = 'catalog') {
 
   const price = product.price === 0
     ? `<span class="card-price free">Free</span>`
-    : `<span class="card-price">$${product.price.toFixed(2)}${product.oldPrice ? `<span class="old">$${product.oldPrice.toFixed(2)}</span>` : ''}</span>`;
+    : canDownloadProduct(product)
+      ? `<span class="card-price free">Included</span>`
+      : `<span class="card-price">$${product.price.toFixed(2)}${product.oldPrice ? `<span class="old">$${product.oldPrice.toFixed(2)}</span>` : ''}</span>`;
 
   const footerLeft = context === 'purchases'
     ? `<span class="card-owned">Purchased</span>`
@@ -6476,13 +6526,18 @@ function openProduct(product) {
   const priceEl = document.getElementById('productPrice');
   if (priceEl) {
     priceEl.innerHTML = renderProductPriceContent(product);
-    priceEl.classList.toggle('free', product.price === 0);
+    priceEl.classList.toggle('free', product.price === 0 || canDownloadProduct(product));
   }
 
-  // Subscription access for premium / exclusive when lurker
-  const tier = getProductAccessTier(product);
-  document.getElementById('subAccessBtn').style.display =
-    tier !== 'free' && tier !== 'bundle' && !canAccessWithPlan(product) ? 'flex' : 'none';
+  // Subscription gate for HEAVENLY-only listings (Leaker/Lurker can view, not buy)
+  const subBtn = document.getElementById('subAccessBtn');
+  if (subBtn) {
+    const lockedHeavenly = isHeavenlyOnlyLocked(product);
+    subBtn.style.display = lockedHeavenly ? 'flex' : 'none';
+    if (lockedHeavenly) {
+      subBtn.innerHTML = '<span class="sub-icon" aria-hidden="true"></span>Get HEAVENLY to download';
+    }
+  }
   refreshBuyButton(product);
   refreshHeartButton(product);
 
@@ -6500,25 +6555,40 @@ function openProduct(product) {
 /* Buy / Download state for the product detail bar */
 function refreshBuyButton(product) {
   const btn = document.getElementById('buyBtn');
+  if (!btn) return;
   const tier = getProductAccessTier(product);
   btn.classList.remove('is-buy');
+  btn.disabled = false;
+
   if (canDownloadProduct(product)) {
-    const label = tier === 'free' ? 'Download Free' : 'Download';
+    const label = (tier === 'free' || !(Number(product.price) > 0)) ? 'Download Free' : 'Download';
     btn.innerHTML = `${DL_ICON} ${label}`;
     btn.onclick = () => startDownload(product);
-  } else if (tier === 'bundle' || isPaid(product)) {
+    return;
+  }
+
+  if (canPurchaseProduct(product)) {
     btn.classList.add('is-buy');
-    btn.textContent = `Buy $${product.price.toFixed(2)}`;
+    btn.textContent = `Buy $${Number(product.price).toFixed(2)}`;
     btn.onclick = () => openPaymentModal({
       kind: 'product',
       productId: product.id,
       title: product.title || 'Catalog item',
       price: product.price,
     });
-  } else {
-    btn.innerHTML = `${DL_ICON} Download Free`;
-    btn.onclick = () => startDownload(product);
+    return;
   }
+
+  // HEAVENLY-gated: Leaker/Lurker may view but cannot buy
+  if (isHeavenlyOnlyLocked(product)) {
+    btn.classList.add('is-buy');
+    btn.textContent = 'HEAVENLY only';
+    btn.onclick = () => showView('plans');
+    return;
+  }
+
+  btn.innerHTML = `${DL_ICON} Download Free`;
+  btn.onclick = () => startDownload(product);
 }
 
 function renderPurchases() {
