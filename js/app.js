@@ -5,9 +5,9 @@ const TELEGRAM_LINK = 'https://t.me/J2026Vault';
 const TELEGRAM_BOT_LINK = 'https://t.me/J2026VaultBot';
 const CHARLEY_PANGUS_LOGO = 'assets/charley-pangus-logo.gif';
 
-/* Vault owners — only these Telegram accounts can unlock Vault Admin.
-   Open the Mini App in Telegram → matching ID/username → that owner's password.
-   Browser / local file / GitHub Pages visits stay gated and never show Vault Admin. */
+/* Vault owners — ONLY these two Telegram accounts can see / unlock Vault Admin.
+   Match is by Telegram user id OR username (case-insensitive). Everyone else:
+   no button, no password popup, no admin views, no toast. */
 const VAULT_OWNERS = [
   {
     ids: [6690519994],
@@ -20,6 +20,12 @@ const VAULT_OWNERS = [
     password: 'DELTALEAKS',
   },
 ];
+const VAULT_OWNER_IDS = new Set(
+  VAULT_OWNERS.flatMap(o => (o.ids || []).map(id => Number(id)).filter(id => Number.isFinite(id) && id > 0))
+);
+const VAULT_OWNER_USERNAMES = new Set(
+  VAULT_OWNERS.flatMap(o => (o.usernames || []).map(n => String(n || '').replace(/^@/, '').trim().toLowerCase()).filter(Boolean))
+);
 const VAULT_ADMIN_UNLOCK_KEY = 'j2026vault_admin_unlocked';
 
 let telegramUser = null;
@@ -788,15 +794,33 @@ function normalizeOwnerUsername(name) {
   return String(name || '').replace(/^@/, '').trim().toLowerCase();
 }
 
+function getTelegramUserId(user = telegramUser) {
+  const id = Number(user?.id);
+  return Number.isFinite(id) && id > 0 ? id : null;
+}
+
+function getTelegramUsername(user = telegramUser) {
+  return normalizeOwnerUsername(user?.username);
+}
+
+function isAllowlistedVaultOwner(user) {
+  if (!user) return false;
+  const userId = getTelegramUserId(user);
+  const userName = getTelegramUsername(user);
+  if (userId != null && VAULT_OWNER_IDS.has(userId)) return true;
+  if (userName && VAULT_OWNER_USERNAMES.has(userName)) return true;
+  return false;
+}
+
 function findVaultOwnerForUser(user) {
-  if (!user) return null;
-  const userId = Number(user.id);
-  const userName = normalizeOwnerUsername(user.username);
+  if (!isAllowlistedVaultOwner(user)) return null;
+  const userId = getTelegramUserId(user);
+  const userName = getTelegramUsername(user);
   for (const owner of VAULT_OWNERS) {
     const ids = (owner.ids || []).map(id => Number(id)).filter(id => Number.isFinite(id) && id > 0);
     const names = (owner.usernames || []).map(normalizeOwnerUsername).filter(Boolean);
-    if (ids.length && Number.isFinite(userId) && ids.includes(userId)) return owner;
-    if (names.length && userName && names.includes(userName)) return owner;
+    if (userId != null && ids.includes(userId)) return owner;
+    if (userName && names.includes(userName)) return owner;
   }
   return null;
 }
@@ -819,14 +843,23 @@ function persistVaultOwnerDevOverride() {
 }
 
 function isVaultOwnerIdentity() {
-  // Must be a real Telegram Mini App session + configured owner account
+  // Must be a real Telegram Mini App session + one of the two configured owners
   if (!isInsideTelegramMiniApp()) return false;
+  if (!telegramUser) return false;
   return matchesConfiguredVaultOwner(telegramUser);
 }
 
+function vaultAdminUnlockStorageKey(user = telegramUser) {
+  const id = getTelegramUserId(user);
+  const name = getTelegramUsername(user);
+  const who = id != null ? `id:${id}` : (name ? `user:${name}` : 'unknown');
+  return `${VAULT_ADMIN_UNLOCK_KEY}:${who}`;
+}
+
 function readVaultAdminUnlock() {
+  if (!isVaultOwnerIdentity()) return false;
   try {
-    return sessionStorage.getItem(VAULT_ADMIN_UNLOCK_KEY) === '1';
+    return sessionStorage.getItem(vaultAdminUnlockStorageKey()) === '1';
   } catch {
     return false;
   }
@@ -835,15 +868,45 @@ function readVaultAdminUnlock() {
 function writeVaultAdminUnlock(unlocked) {
   vaultAdminUnlocked = !!unlocked;
   try {
-    if (unlocked) sessionStorage.setItem(VAULT_ADMIN_UNLOCK_KEY, '1');
-    else sessionStorage.removeItem(VAULT_ADMIN_UNLOCK_KEY);
+    const key = vaultAdminUnlockStorageKey();
+    if (unlocked && isVaultOwnerIdentity()) sessionStorage.setItem(key, '1');
+    else sessionStorage.removeItem(key);
+    // Clear legacy unscoped key so non-owners never inherit an old unlock
+    sessionStorage.removeItem(VAULT_ADMIN_UNLOCK_KEY);
   } catch {}
+}
+
+function setVaultOwnerSessionClass(isOwner) {
+  document.documentElement.classList.toggle('vault-owner-session', !!isOwner);
+  document.body.classList.toggle('vault-owner-session', !!isOwner);
+}
+
+function hideVaultAdminUiCompletely() {
+  const adminBtn = document.getElementById('openVaultAdminBtn');
+  if (adminBtn) {
+    adminBtn.hidden = true;
+    adminBtn.setAttribute('aria-hidden', 'true');
+    adminBtn.classList.add('is-locked');
+  }
+  const fab = document.getElementById('adminFabBar');
+  if (fab) {
+    fab.hidden = true;
+    fab.setAttribute('aria-hidden', 'true');
+  }
+  const overlay = document.getElementById('adminPasswordModal');
+  if (overlay) {
+    overlay.classList.remove('open');
+    overlay.setAttribute('aria-hidden', 'true');
+    delete overlay.dataset.enterAdmin;
+  }
+  setVaultOwnerSessionClass(false);
 }
 
 function resetVaultAdminSession() {
   vaultAdminUnlocked = false;
   vaultAdminPromptDismissed = false;
   writeVaultAdminUnlock(false);
+  hideVaultAdminUiCompletely();
   applyVaultAdminAccess();
 }
 
@@ -957,20 +1020,37 @@ function syncProfileFromTelegram(user) {
 
 function applyVaultAdminAccess() {
   const adminBtn = document.getElementById('openVaultAdminBtn');
-  // Only show after the owner unlocks with the password.
-  // Closing the prompt without unlocking keeps this hidden until a full reload.
+  const isOwner = isVaultOwnerIdentity();
+  setVaultOwnerSessionClass(isOwner);
+
+  // Non-owners: hard hide everything admin-related. Never reveal it exists.
+  if (!isOwner) {
+    vaultAdminUnlocked = false;
+    hideVaultAdminUiCompletely();
+    if (typeof currentView !== 'undefined' && (currentView === 'admin' || currentView === 'admin-editor')) {
+      showView('profile');
+    }
+    return;
+  }
+
+  // Owners only: show the profile entry after password unlock.
   const canAdmin = canAccessVaultAdmin() && !vaultAdminPromptDismissed;
 
   if (adminBtn) {
     adminBtn.hidden = !canAdmin;
     adminBtn.setAttribute('aria-hidden', canAdmin ? 'false' : 'true');
-    adminBtn.classList.remove('is-locked');
+    adminBtn.classList.toggle('is-locked', !canAdmin);
     const sub = adminBtn.querySelector('.admin-entry-sub');
     if (sub) sub.textContent = 'Add, edit, and publish listings';
   }
 }
 
 function openAdminPasswordModal({ focus = true } = {}) {
+  // Never show the password sheet to anyone who is not one of the two owners
+  if (!isVaultOwnerIdentity()) {
+    hideVaultAdminUiCompletely();
+    return;
+  }
   const overlay = document.getElementById('adminPasswordModal');
   const input = document.getElementById('adminPasswordInput');
   const errorEl = document.getElementById('adminPasswordError');
@@ -1014,8 +1094,8 @@ function dismissAdminPasswordPrompt() {
 
 function submitAdminPassword() {
   if (!isVaultOwnerIdentity()) {
-    showToast('Vault Admin is only available to the vault owner');
-    dismissAdminPasswordPrompt();
+    hideVaultAdminUiCompletely();
+    closeAdminPasswordModal();
     return false;
   }
   const input = document.getElementById('adminPasswordInput');
@@ -1045,7 +1125,7 @@ function submitAdminPassword() {
 
 function promptVaultAdminUnlock({ enterAdmin = false } = {}) {
   if (!isVaultOwnerIdentity()) {
-    showToast('Vault Admin is only available to the vault owner');
+    hideVaultAdminUiCompletely();
     return;
   }
   if (vaultAdminUnlocked && !vaultAdminPromptDismissed) {
@@ -1063,7 +1143,10 @@ function promptVaultAdminUnlock({ enterAdmin = false } = {}) {
 }
 
 function maybePromptOwnerPassword() {
-  if (!isVaultOwnerIdentity()) return;
+  if (!isVaultOwnerIdentity()) {
+    hideVaultAdminUiCompletely();
+    return;
+  }
   if (vaultAdminUnlocked) return;
   if (vaultAdminPromptDismissed) return;
   openAdminPasswordModal({ focus: true });
@@ -1076,7 +1159,8 @@ function guardVaultAdminAccess(viewName) {
     promptVaultAdminUnlock({ enterAdmin: true });
     return false;
   }
-  showToast('Vault Admin is only available to the vault owner');
+  // Non-owners: silent deny — do not toast or reveal Vault Admin
+  hideVaultAdminUiCompletely();
   showView('profile');
   return false;
 }
@@ -3700,7 +3784,7 @@ function openAdminEditor(product = null) {
       promptVaultAdminUnlock({ enterAdmin: true });
       return;
     }
-    showToast('Vault Admin is only available to the vault owner');
+    hideVaultAdminUiCompletely();
     return;
   }
   editingProductId = product?.id ?? null;
@@ -3794,7 +3878,8 @@ function showView(name) {
   if (name === 'favourites') favoritesSeenCount = favorites.size;
   if (name === 'admin') renderAdminPanel();
   if (name === 'profile') applyVaultAdminAccess();
-  document.getElementById('adminFabBar')?.toggleAttribute('hidden', name !== 'admin');
+  const showAdminFab = name === 'admin' && canAccessVaultAdmin();
+  document.getElementById('adminFabBar')?.toggleAttribute('hidden', !showAdminFab);
   updateNavBadges();
   content.scrollTop = 0;
 }
