@@ -38,7 +38,6 @@ let vaultAdminUnlocked = false;
 let vaultAdminPromptDismissed = false;
 let membersCache = [];
 let editingMemberId = null;
-let peAvatarDataUrl = null;
 
 /* Live catalog starts empty — only Vault Admin posts appear here. */
 const BASE_PRODUCTS = [];
@@ -1380,21 +1379,33 @@ async function heartbeatOwnProfile() {
   return profile;
 }
 
-function downloadMembersJson(members = membersCache) {
-  const payload = {
-    updatedAt: new Date().toISOString(),
-    members: (members || []).map(m => normalizeMemberRecord(m)).filter(m => m.id != null),
-  };
-  const blob = new Blob([JSON.stringify(payload, null, 2) + '\n'], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'members.json';
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-  return payload;
+function memberDaysLeft(member) {
+  if (!member || member.plan !== 'ACOLYTE') return null;
+  if (!member.endsAt) return 30;
+  const ends = new Date(member.endsAt).getTime();
+  if (!Number.isFinite(ends)) return 30;
+  return Math.max(0, Math.ceil((ends - Date.now()) / 86400000));
+}
+
+function memberAccessLabel(member) {
+  if (!member) return '';
+  if (member.plan === 'ETERNAL') return 'Forever';
+  if (member.plan === 'ACOLYTE') {
+    const days = memberDaysLeft(member);
+    return days == null ? 'Leaker' : `${days}d left`;
+  }
+  return 'Free';
+}
+
+function setProfileEditorPlan(planKey) {
+  const plan = ['MORTAL', 'ACOLYTE', 'ETERNAL'].includes(planKey) ? planKey : 'MORTAL';
+  const hidden = document.getElementById('pePlan');
+  if (hidden) hidden.value = plan;
+  document.querySelectorAll('#pePlanPicker .pe-plan-chip').forEach(btn => {
+    btn.classList.toggle('is-active', btn.dataset.plan === plan);
+  });
+  const daysWrap = document.getElementById('peDaysWrap');
+  if (daysWrap) daysWrap.hidden = plan !== 'ACOLYTE';
 }
 
 function renderProfileEditorList() {
@@ -1403,7 +1414,7 @@ function renderProfileEditorList() {
   const subtitle = document.getElementById('profileEditorSubtitle');
   if (!listEl) return;
   const members = [...membersCache].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
-  if (subtitle) subtitle.textContent = `${members.length} member${members.length === 1 ? '' : 's'} registered`;
+  if (subtitle) subtitle.textContent = `${members.length} member${members.length === 1 ? '' : 's'}`;
   listEl.innerHTML = '';
   if (!members.length) {
     if (emptyEl) emptyEl.hidden = false;
@@ -1416,19 +1427,22 @@ function renderProfileEditorList() {
     btn.className = 'profile-editor-member';
     btn.dataset.memberId = String(member.id);
     const avatar = member.avatarDataUrl || member.photoUrl || 'assets/pfp.png';
-    const uname = member.username ? `@${member.username}` : `id ${member.id}`;
+    const handle = member.username ? `@${member.username}` : `ID ${member.id}`;
     btn.innerHTML = `
       <img class="profile-editor-member-avatar" src="${avatar}" alt="" referrerpolicy="no-referrer">
       <span class="profile-editor-member-copy">
         <span class="profile-editor-member-name"></span>
         <span class="profile-editor-member-meta"></span>
       </span>
-      <span class="profile-editor-member-plan"></span>
+      <span class="profile-editor-member-side">
+        <span class="profile-editor-member-plan"></span>
+        <span class="profile-editor-member-days"></span>
+      </span>
     `;
-    btn.querySelector('.profile-editor-member-name').textContent = member.name || 'User';
-    btn.querySelector('.profile-editor-member-meta').textContent =
-      `${uname} · Reg ${member.registeredAt} · ${member.downloads} dl · ${member.purchases} buy`;
+    btn.querySelector('.profile-editor-member-name').textContent = member.name || handle;
+    btn.querySelector('.profile-editor-member-meta').textContent = `${handle} · joined ${member.registeredAt || '—'}`;
     btn.querySelector('.profile-editor-member-plan').textContent = planLabel(member.plan);
+    btn.querySelector('.profile-editor-member-days').textContent = memberAccessLabel(member);
     btn.addEventListener('click', () => openProfileEditorSheet(member.id));
     listEl.appendChild(btn);
   });
@@ -1439,19 +1453,24 @@ function openProfileEditorSheet(memberId = null) {
   if (!sheet) return;
   editingMemberId = memberId;
   const member = memberId != null ? findMemberInCache(memberId) : null;
-  peAvatarDataUrl = member?.avatarDataUrl || null;
-
+  const eyebrow = document.getElementById('profileEditorSheetEyebrow');
   const title = document.getElementById('profileEditorSheetTitle');
-  if (title) title.textContent = member ? 'Edit member' : 'Add member';
-  document.getElementById('peTelegramId').value = member?.id ?? '';
-  document.getElementById('peTelegramId').disabled = !!member;
-  document.getElementById('peUsername').value = member?.username || '';
-  document.getElementById('peName').value = member?.name || '';
-  document.getElementById('peRegistered').value = member?.registeredAt || formatRegisteredLabel(new Date());
-  document.getElementById('peDownloads').value = member?.downloads ?? 0;
-  document.getElementById('pePurchases').value = member?.purchases ?? 0;
-  document.getElementById('pePlan').value = member?.plan || 'MORTAL';
-  document.getElementById('peAvatarPreview').src = member?.avatarDataUrl || member?.photoUrl || 'assets/pfp.png';
+  if (eyebrow) eyebrow.textContent = member ? (member.username ? `@${member.username}` : `ID ${member.id}`) : 'New member';
+  if (title) title.textContent = member ? 'Set subscription' : 'Add Telegram ID';
+
+  const idInput = document.getElementById('peTelegramId');
+  if (idInput) {
+    idInput.value = member?.id ?? '';
+    idInput.disabled = !!member;
+  }
+
+  const plan = member?.plan || 'MORTAL';
+  setProfileEditorPlan(plan);
+  const daysInput = document.getElementById('peDaysLeft');
+  if (daysInput) {
+    daysInput.value = String(memberDaysLeft(member) ?? 30);
+  }
+
   document.getElementById('peDeleteBtn').hidden = !member;
   const err = document.getElementById('peError');
   if (err) { err.hidden = true; err.textContent = ''; }
@@ -1462,7 +1481,6 @@ function closeProfileEditorSheet() {
   const sheet = document.getElementById('profileEditorSheet');
   if (sheet) sheet.hidden = true;
   editingMemberId = null;
-  peAvatarDataUrl = null;
 }
 
 async function saveProfileEditorMember() {
@@ -1472,30 +1490,31 @@ async function saveProfileEditorMember() {
     if (err) { err.textContent = 'Enter a valid Telegram ID'; err.hidden = false; }
     return;
   }
-  const registeredAt = parseRegisteredLabel(document.getElementById('peRegistered').value)
-    || formatRegisteredLabel(new Date());
+
+  const prev = findMemberInCache(idVal) || {};
+  const plan = document.getElementById('pePlan')?.value || 'MORTAL';
+  let endsAt = null;
+  if (plan === 'ACOLYTE') {
+    const days = Math.max(1, Number(document.getElementById('peDaysLeft')?.value) || 30);
+    endsAt = new Date(Date.now() + days * 86400000).toISOString();
+  } else if (plan === 'ETERNAL') {
+    endsAt = null;
+  }
+
   const member = normalizeMemberRecord({
+    ...prev,
     id: idVal,
-    username: document.getElementById('peUsername').value,
-    name: document.getElementById('peName').value,
-    registeredAt,
-    downloads: document.getElementById('peDownloads').value,
-    purchases: document.getElementById('pePurchases').value,
-    plan: document.getElementById('pePlan').value,
-    avatarDataUrl: peAvatarDataUrl,
-    photoUrl: (!peAvatarDataUrl && document.getElementById('peAvatarPreview').src?.startsWith('http'))
-      ? document.getElementById('peAvatarPreview').src
-      : (findMemberInCache(idVal)?.photoUrl || ''),
-    endsAt: document.getElementById('pePlan').value === 'ETERNAL'
-      ? null
-      : (document.getElementById('pePlan').value === 'ACOLYTE'
-        ? new Date(Date.now() + 30 * 86400000).toISOString()
-        : null),
+    name: prev.name || `User ${idVal}`,
+    username: prev.username || '',
+    registeredAt: prev.registeredAt || formatRegisteredLabel(new Date()),
+    downloads: prev.downloads ?? 0,
+    purchases: prev.purchases ?? 0,
+    plan,
+    endsAt,
   });
 
   upsertMemberInCache(member);
 
-  // If editing the currently logged-in user, apply live
   if (getTelegramUserId(telegramUser) === member.id) {
     writeOwnProfileLocal(member);
     applyProfileRecordToUi({ ...member, _forceName: true });
@@ -1506,13 +1525,11 @@ async function saveProfileEditorMember() {
       await membersApiFetch(`/api/members/${member.id}`, { method: 'PUT', body: member });
       await refreshMembersList();
     }
-  } catch (e) {
-    showToast('Saved locally — publish members.json or set API URL');
-  }
+  } catch {}
 
   closeProfileEditorSheet();
   renderProfileEditorList();
-  showToast(`Saved ${member.name}`);
+  showToast(`${planLabel(member.plan)} saved`);
 }
 
 async function deleteProfileEditorMember() {
@@ -1520,7 +1537,6 @@ async function deleteProfileEditorMember() {
   removeMemberFromCache(editingMemberId);
   try {
     if (readMembersApiUrl()) {
-      // No delete endpoint — publish full list instead
       await membersApiFetch('/api/members', { method: 'PUT', body: { members: membersCache } });
     }
   } catch {}
@@ -1538,28 +1554,9 @@ async function openProfileEditor() {
     hideVaultAdminUiCompletely();
     return;
   }
-  const apiInput = document.getElementById('profileEditorApiUrl');
-  if (apiInput) apiInput.value = readMembersApiUrl();
   showView('profile-editor');
-  showToast('Loading members…');
   await refreshMembersList();
   renderProfileEditorList();
-}
-
-async function publishMembersList() {
-  writeMembersCache(membersCache);
-  try {
-    if (readMembersApiUrl()) {
-      await membersApiFetch('/api/members', { method: 'PUT', body: { members: membersCache } });
-      showToast('Members published to API');
-    } else {
-      downloadMembersJson(membersCache);
-      showToast('Downloaded members.json — upload it next to index.html');
-    }
-  } catch {
-    downloadMembersJson(membersCache);
-    showToast('Downloaded members.json — upload it next to index.html');
-  }
 }
 
 function applyVaultAdminAccess() {
@@ -5120,31 +5117,11 @@ document.getElementById('profileEditorRefresh')?.addEventListener('click', async
   showToast('Members refreshed');
 });
 document.getElementById('profileEditorAddBtn')?.addEventListener('click', () => openProfileEditorSheet(null));
-document.getElementById('profileEditorPublishBtn')?.addEventListener('click', () => publishMembersList());
-document.getElementById('profileEditorApiSave')?.addEventListener('click', () => {
-  writeMembersApiUrl(document.getElementById('profileEditorApiUrl')?.value || '');
-  showToast(readMembersApiUrl() ? 'API URL saved' : 'API URL cleared');
-});
 document.getElementById('profileEditorSheetClose')?.addEventListener('click', () => closeProfileEditorSheet());
 document.getElementById('peSaveBtn')?.addEventListener('click', () => saveProfileEditorMember());
 document.getElementById('peDeleteBtn')?.addEventListener('click', () => deleteProfileEditorMember());
-document.getElementById('peAvatarPick')?.addEventListener('click', () => document.getElementById('peAvatarFile')?.click());
-document.getElementById('peAvatarClear')?.addEventListener('click', () => {
-  peAvatarDataUrl = null;
-  const preview = document.getElementById('peAvatarPreview');
-  if (preview) preview.src = 'assets/pfp.png';
-});
-document.getElementById('peAvatarFile')?.addEventListener('change', e => {
-  const file = e.target.files?.[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = () => {
-    peAvatarDataUrl = String(reader.result || '');
-    const preview = document.getElementById('peAvatarPreview');
-    if (preview) preview.src = peAvatarDataUrl;
-  };
-  reader.readAsDataURL(file);
-  e.target.value = '';
+document.querySelectorAll('#pePlanPicker .pe-plan-chip').forEach(btn => {
+  btn.addEventListener('click', () => setProfileEditorPlan(btn.dataset.plan));
 });
 
 document.getElementById('adminPasswordSubmit')?.addEventListener('click', () => submitAdminPassword());
@@ -6228,8 +6205,6 @@ function initApp() {
   applyVaultAdminAccess();
   loadCatalogProducts();
   loadProfileName();
-  const apiInput = document.getElementById('profileEditorApiUrl');
-  if (apiInput) apiInput.value = readMembersApiUrl();
 
   // Load accurate registration + shared member overrides, then heartbeat
   Promise.resolve()
