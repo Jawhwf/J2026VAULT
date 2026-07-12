@@ -23,6 +23,28 @@ window.VAULT_ACCENT_THEMES = {
 };
 
 window.VAULT_ACCENT_STORAGE_KEY = 'j2026vault_accent_theme';
+window.VAULT_ACCENT_COOKIE = 'j2026vault_accent_theme';
+
+function _vaultAccentCookieRead() {
+  try {
+    const match = document.cookie.match(/(?:^|;\s*)j2026vault_accent_theme=([^;]*)/);
+    return match ? decodeURIComponent(match[1]) : '';
+  } catch {
+    return '';
+  }
+}
+
+function _vaultAccentCookieWrite(themeId) {
+  try {
+    const maxAge = 60 * 60 * 24 * 400;
+    document.cookie = `${window.VAULT_ACCENT_COOKIE}=${encodeURIComponent(themeId)}; path=/; max-age=${maxAge}; SameSite=Lax`;
+  } catch {}
+}
+
+function _vaultNormalizeAccentId(raw) {
+  const id = String(raw || '').trim().toLowerCase();
+  return (window.VAULT_ACCENT_THEMES && window.VAULT_ACCENT_THEMES[id]) ? id : '';
+}
 
 window.applyVaultAccentTheme = function applyVaultAccentTheme(themeId, { persist = true } = {}) {
   const themes = window.VAULT_ACCENT_THEMES || {};
@@ -69,13 +91,150 @@ window.applyVaultAccentTheme = function applyVaultAccentTheme(themeId, { persist
   root.dataset.accentTheme = theme.id;
 
   if (persist) {
-    try { localStorage.setItem(window.VAULT_ACCENT_STORAGE_KEY, theme.id); } catch {}
+    try {
+      localStorage.setItem(window.VAULT_ACCENT_STORAGE_KEY, theme.id);
+      localStorage.setItem(`${window.VAULT_ACCENT_STORAGE_KEY}_at`, new Date().toISOString());
+    } catch {}
+    _vaultAccentCookieWrite(theme.id);
   }
   return theme;
 };
 
+window.readLocalVaultAccentThemeId = function readLocalVaultAccentThemeId() {
+  try {
+    const fromUrl = new URLSearchParams(location.search || '');
+    const fromParam = _vaultNormalizeAccentId(fromUrl.get('accent') || fromUrl.get('theme'));
+    if (fromParam) return fromParam;
+  } catch {}
+  try {
+    const fromLs = _vaultNormalizeAccentId(localStorage.getItem(window.VAULT_ACCENT_STORAGE_KEY));
+    if (fromLs) return fromLs;
+  } catch {}
+  const fromCookie = _vaultNormalizeAccentId(_vaultAccentCookieRead());
+  if (fromCookie) return fromCookie;
+  return 'violet';
+};
+
+/** Candidate URLs for the shared vault accent (API + Pages mirror). */
+window.vaultAccentFetchUrls = function vaultAccentFetchUrls() {
+  const urls = [];
+  const push = (u) => {
+    const clean = String(u || '').trim();
+    if (!clean || urls.includes(clean)) return;
+    urls.push(clean);
+  };
+
+  try {
+    const ls = localStorage.getItem('j2026vault_members_api_url');
+    if (ls) push(`${String(ls).replace(/\/$/, '')}/api/accent`);
+  } catch {}
+
+  const cfgApi = String(window.VAULT_CONFIG?.MEMBERS_API_URL || '').trim().replace(/\/$/, '');
+  if (cfgApi) push(`${cfgApi}/api/accent`);
+
+  const host = (location.hostname || '').toLowerCase();
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || location.protocol === 'file:') {
+    push('http://127.0.0.1:8765/api/accent');
+  }
+
+  const webapp = String(window.VAULT_CONFIG?.WEBAPP_URL || '').trim().replace(/\/?$/, '/');
+  if (webapp) push(`${webapp}accent-theme.json`);
+
+  if (location.protocol !== 'file:') {
+    try { push(new URL('accent-theme.json', location.href).href); } catch {}
+    push('accent-theme.json');
+  }
+
+  return urls;
+};
+
+window.fetchSharedVaultAccentTheme = async function fetchSharedVaultAccentTheme() {
+  const urls = window.vaultAccentFetchUrls();
+  const stamp = Date.now();
+
+  // Resolve members-api-url.json first when on Pages / local http (not file:// relative)
+  if (location.protocol !== 'file:') {
+    try {
+      const res = await fetch(`members-api-url.json?t=${stamp}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const base = String(data?.url || '').trim().replace(/\/$/, '');
+        if (base) {
+          try { localStorage.setItem('j2026vault_members_api_url', base); } catch {}
+          urls.unshift(`${base}/api/accent`);
+        }
+      }
+    } catch {}
+  }
+
+  for (const url of urls) {
+    try {
+      const sep = url.includes('?') ? '&' : '?';
+      const res = await fetch(`${url}${sep}t=${stamp}`, { cache: 'no-store' });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const theme = _vaultNormalizeAccentId(data?.theme || data?.id);
+      if (theme) {
+        return { theme, updatedAt: data?.updatedAt || null, source: url };
+      }
+    } catch {}
+  }
+  return null;
+};
+
+/** Pull shared accent so Telegram / browser / file:// stay in sync. */
+window.syncSharedVaultAccentTheme = async function syncSharedVaultAccentTheme({ force = false } = {}) {
+  const shared = await window.fetchSharedVaultAccentTheme();
+  if (!shared?.theme) return null;
+  const current = document.documentElement.dataset.accentTheme || window.readLocalVaultAccentThemeId();
+
+  let localAt = 0;
+  try {
+    localAt = Date.parse(localStorage.getItem(`${window.VAULT_ACCENT_STORAGE_KEY}_at`) || '') || 0;
+  } catch {}
+  const sharedAt = Date.parse(shared.updatedAt || '') || 0;
+  const inTelegram = !!(window.Telegram?.WebApp?.initData);
+  // Inside Telegram: don't clobber a newer local pick that hasn't reached the API yet.
+  // Outside Telegram (gate / browser URL / file://): shared vault theme wins.
+  const keepLocal = !force
+    && inTelegram
+    && shared.theme !== current
+    && localAt > 0
+    && localAt > sharedAt;
+
+  if (keepLocal) return shared;
+
+  if (!force && shared.theme === current) {
+    try {
+      localStorage.setItem(window.VAULT_ACCENT_STORAGE_KEY, shared.theme);
+      if (shared.updatedAt) {
+        localStorage.setItem(`${window.VAULT_ACCENT_STORAGE_KEY}_at`, shared.updatedAt);
+      }
+    } catch {}
+    _vaultAccentCookieWrite(shared.theme);
+    return shared;
+  }
+
+  window.applyVaultAccentTheme(shared.theme, { persist: true });
+  if (shared.updatedAt) {
+    try { localStorage.setItem(`${window.VAULT_ACCENT_STORAGE_KEY}_at`, shared.updatedAt); } catch {}
+  }
+  try {
+    window.dispatchEvent(new CustomEvent('vault:accent-theme', { detail: shared }));
+  } catch {}
+  return shared;
+};
+
 (function bootAccentTheme() {
-  let id = 'violet';
-  try { id = localStorage.getItem(window.VAULT_ACCENT_STORAGE_KEY) || 'violet'; } catch {}
+  const id = window.readLocalVaultAccentThemeId();
   window.applyVaultAccentTheme(id, { persist: false });
+  // Shared sync (API / accent-theme.json) — keeps gate + browser URL matching Telegram
+  const run = () => {
+    window.syncSharedVaultAccentTheme().catch(() => {});
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', run, { once: true });
+  } else {
+    run();
+  }
 })();

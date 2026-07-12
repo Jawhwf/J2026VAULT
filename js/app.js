@@ -6768,6 +6768,9 @@ if (carEl) {
 
 /* ── Accent theme (profile appearance) ── */
 function getSavedAccentThemeId() {
+  if (typeof window.readLocalVaultAccentThemeId === 'function') {
+    return window.readLocalVaultAccentThemeId();
+  }
   try {
     return localStorage.getItem(window.VAULT_ACCENT_STORAGE_KEY || 'j2026vault_accent_theme') || 'violet';
   } catch {
@@ -6787,13 +6790,36 @@ function syncAccentThemeUi(themeId) {
   });
 }
 
-function setAccentTheme(themeId, { toast = false } = {}) {
+async function pushAccentThemeToServer(themeId) {
+  const id = String(themeId || '').trim().toLowerCase();
+  if (!id || !window.VAULT_ACCENT_THEMES?.[id]) return null;
+  try {
+    await resolveMembersApiUrl();
+  } catch {}
+  if (!readMembersApiUrl() || !getTelegramInitData()) return null;
+  try {
+    return await membersApiFetch('/api/accent', { method: 'POST', body: { theme: id } });
+  } catch {
+    return null;
+  }
+}
+
+function setAccentTheme(themeId, { toast = false, sync = true } = {}) {
   const apply = window.applyVaultAccentTheme;
   const theme = typeof apply === 'function'
     ? apply(themeId, { persist: true })
     : null;
   syncAccentThemeUi(theme?.id || themeId);
   if (toast && theme) showToast(`${theme.label} accent`);
+  if (sync && theme?.id) {
+    pushAccentThemeToServer(theme.id).then((data) => {
+      if (data?.updatedAt) {
+        try {
+          localStorage.setItem(`${window.VAULT_ACCENT_STORAGE_KEY}_at`, data.updatedAt);
+        } catch {}
+      }
+    }).catch(() => {});
+  }
   return theme;
 }
 
@@ -6848,6 +6874,25 @@ document.getElementById('appearanceSheetDone')?.addEventListener('click', closeA
 document.getElementById('appearanceSheet')?.addEventListener('click', e => {
   if (e.target === e.currentTarget) closeAppearanceSheet();
 });
+window.addEventListener('vault:accent-theme', (e) => {
+  const id = e?.detail?.theme || getSavedAccentThemeId();
+  syncAccentThemeUi(id);
+});
+
+/* Push Telegram-local accent to shared store, then pull so gate/browser match. */
+(async function bootAccentThemeSync() {
+  try {
+    await resolveMembersApiUrl();
+  } catch {}
+  const localId = getSavedAccentThemeId();
+  if (getTelegramInitData() && localId) {
+    await pushAccentThemeToServer(localId);
+  }
+  if (typeof window.syncSharedVaultAccentTheme === 'function') {
+    await window.syncSharedVaultAccentTheme({ force: !getTelegramInitData() });
+  }
+  syncAccentThemeUi(document.documentElement.dataset.accentTheme || localId);
+})();
 
 /* ── Profile avatar (PNG / GIF) ── */
 let avatarObjectUrl = null;
