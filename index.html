@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20260712m">
+  <link rel="stylesheet" href="css/styles.css?v=20260712n">
   <link rel="icon" href="assets/pfp.png" type="image/png">
   <link rel="preload" href="assets/j26-logo.svg" as="image" type="image/svg+xml">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -357,15 +357,44 @@
               <div class="profile-editor-sheet-head">
                 <div>
                   <p class="pe-sheet-eyebrow" id="profileEditorSheetEyebrow">Member</p>
-                  <h2 id="profileEditorSheetTitle">Set subscription</h2>
+                  <h2 id="profileEditorSheetTitle">Edit profile</h2>
                 </div>
                 <button type="button" class="pay-close" id="profileEditorSheetClose" aria-label="Close">
                   <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
                 </button>
               </div>
 
+              <div class="pe-avatar-row">
+                <button type="button" class="pe-avatar-btn" id="peAvatarBtn" aria-label="Change profile picture">
+                  <img id="peAvatarPreview" src="assets/pfp.png" alt="">
+                  <span>Change photo</span>
+                </button>
+                <input type="file" id="peAvatarFile" accept="image/*" hidden>
+                <button type="button" class="pe-avatar-clear" id="peAvatarClear" hidden>Clear photo</button>
+              </div>
+
               <label class="admin-pass-label" for="peTelegramId">Telegram ID</label>
               <input class="admin-pass-input" id="peTelegramId" inputmode="numeric" placeholder="e.g. 1866326493" spellcheck="false">
+
+              <label class="admin-pass-label" for="peUsername">Telegram username</label>
+              <input class="admin-pass-input" id="peUsername" placeholder="without @" spellcheck="false" autocomplete="off">
+
+              <label class="admin-pass-label" for="peName">Display name</label>
+              <input class="admin-pass-input" id="peName" placeholder="Name shown on profile" spellcheck="false" maxlength="48">
+
+              <label class="admin-pass-label" for="peRegisteredAt">Joined (DD.MM.YYYY)</label>
+              <input class="admin-pass-input" id="peRegisteredAt" placeholder="12.07.2026" spellcheck="false">
+
+              <div class="pe-stats-edit">
+                <div>
+                  <label class="admin-pass-label" for="peDownloads">Downloads</label>
+                  <input class="admin-pass-input" id="peDownloads" type="number" min="0" step="1" value="0">
+                </div>
+                <div>
+                  <label class="admin-pass-label" for="pePurchases">Purchases</label>
+                  <input class="admin-pass-input" id="pePurchases" type="number" min="0" step="1" value="0">
+                </div>
+              </div>
 
               <label class="admin-pass-label" for="pePlan">Subscription</label>
               <div class="pe-plan-picker" id="pePlanPicker" role="group" aria-label="Subscription">
@@ -382,7 +411,7 @@
               </div>
 
               <p class="admin-pass-error" id="peError" hidden></p>
-              <button type="button" class="admin-pass-submit" id="peSaveBtn">Save</button>
+              <button type="button" class="admin-pass-submit" id="peSaveBtn">Save profile</button>
               <button type="button" class="btn-outline editor-delete-btn" id="peDeleteBtn" hidden>Remove</button>
             </div>
           </div>
@@ -1104,7 +1133,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="js/bundle-tgs-data.js?v=20260712k"></script>
-  <script src="js/vault-config.js?v=20260712m"></script>
-  <script src="js/app.js?v=20260712m"></script>
+  <script src="js/vault-config.js?v=20260712n"></script>
+  <script src="js/app.js?v=20260712n"></script>
 </body>
 </html>
