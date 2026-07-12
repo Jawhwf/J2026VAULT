@@ -2325,14 +2325,7 @@ function refreshCatalogAccessUI() {
       priceEl.classList.toggle('free', currentProduct.price === 0 || canDownloadProduct(currentProduct));
     }
     refreshBuyButton(currentProduct);
-    const subBtn = document.getElementById('subAccessBtn');
-    if (subBtn) {
-      const showHeavenlyUpgrade = shouldShowHeavenlyUpgrade(currentProduct);
-      subBtn.style.display = showHeavenlyUpgrade ? 'flex' : 'none';
-      if (showHeavenlyUpgrade) {
-        subBtn.innerHTML = '<span class="sub-icon" aria-hidden="true"></span>Get HEAVENLY to download';
-      }
-    }
+    syncPlanUpgradeButton(currentProduct);
   }
   filterProducts();
   renderBundles();
@@ -2378,20 +2371,21 @@ function isHeavenlySubscriber(planKey = getActivePlanName()) {
   return planKey === 'ETERNAL';
 }
 
-/** Subscription includes this listing (no checkout). HEAVENLY unlocks everything. */
+/** Subscription includes this listing when plan rank meets the post’s required plan. */
 function canAccessWithPlan(product, planKey = getActivePlanName()) {
   if (!product) return false;
   if (hasCatalogUnlock(product)) return true;
   const tier = getProductAccessTier(product);
   if (tier === 'free' || !(Number(product.price) > 0)) return true;
-  return isHeavenlySubscriber(planKey);
+  const required = getProductRequiredPlan(product);
+  return (PLAN_RANK[planKey] || 0) >= (PLAN_RANK[required] || 0);
 }
 
 function canDownloadProduct(product) {
   return canAccessWithPlan(product);
 }
 
-/** Paid listings can be bought unless already unlocked (HEAVENLY downloads free). */
+/** Paid listings can be bought unless already unlocked by plan / prior purchase. */
 function canPurchaseProduct(product) {
   if (!product) return false;
   if (canDownloadProduct(product)) return false;
@@ -2399,13 +2393,29 @@ function canPurchaseProduct(product) {
   return tier === 'bundle' || isPaid(product);
 }
 
-/** Show “Get HEAVENLY to download” while still allowing Buy for Leaker/Lurker. */
-function shouldShowHeavenlyUpgrade(product) {
-  return !!product
-    && getProductRequiredPlan(product) === 'ETERNAL'
-    && !isHeavenlySubscriber()
-    && !hasCatalogUnlock(product)
-    && !canDownloadProduct(product);
+/** Advertise upgrading to the plan that unlocks free download on this post. */
+function shouldShowPlanUpgrade(product) {
+  if (!product || hasCatalogUnlock(product) || canDownloadProduct(product)) return false;
+  const required = getProductRequiredPlan(product);
+  if (required === 'MORTAL') return false;
+  return (PLAN_RANK[getActivePlanName()] || 0) < (PLAN_RANK[required] || 0);
+}
+
+function getPlanUpgradeCtaLabel(product) {
+  const required = getProductRequiredPlan(product);
+  if (required === 'ETERNAL') return 'Get HEAVENLY to download';
+  if (required === 'ACOLYTE') return 'Get Leaker to download';
+  return 'Get Premium to download';
+}
+
+function syncPlanUpgradeButton(product) {
+  const subBtn = document.getElementById('subAccessBtn');
+  if (!subBtn) return;
+  const show = shouldShowPlanUpgrade(product);
+  subBtn.style.display = show ? 'flex' : 'none';
+  if (show) {
+    subBtn.innerHTML = `<span class="sub-icon" aria-hidden="true"></span>${getPlanUpgradeCtaLabel(product)}`;
+  }
 }
 
 const PLAN_BADGE_META = {
@@ -6530,15 +6540,8 @@ function openProduct(product) {
     priceEl.classList.toggle('free', product.price === 0 || canDownloadProduct(product));
   }
 
-  // HEAVENLY promo for Leaker/Lurker — Buy still available below
-  const subBtn = document.getElementById('subAccessBtn');
-  if (subBtn) {
-    const showHeavenlyUpgrade = shouldShowHeavenlyUpgrade(product);
-    subBtn.style.display = showHeavenlyUpgrade ? 'flex' : 'none';
-    if (showHeavenlyUpgrade) {
-      subBtn.innerHTML = '<span class="sub-icon" aria-hidden="true"></span>Get HEAVENLY to download';
-    }
-  }
+  // Upgrade promo (e.g. Get Leaker / Get HEAVENLY) — Buy still available below
+  syncPlanUpgradeButton(product);
   refreshBuyButton(product);
   refreshHeartButton(product);
 
