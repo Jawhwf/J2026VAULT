@@ -3510,13 +3510,13 @@ function syncEditorVersionFields(source = editorVersion) {
 }
 
 function syncEditorCompactInputWidths() {
-  const fit = (el, { min = 2, max = 10, pad = 0 } = {}) => {
+  const fitCh = (el, { min = 2, max = 10, pad = 0 } = {}) => {
     if (!el) return;
     const raw = String(el.value || el.placeholder || '');
     const len = Math.max(min, Math.min(max, (raw.length || min) + pad));
     el.style.setProperty('width', `${len}ch`, 'important');
   };
-  const fitWebsite = el => {
+  const fitText = (el, { minPx = 8 } = {}) => {
     if (!el) return;
     const text = String(el.value || el.placeholder || 'w');
     const cs = window.getComputedStyle(el);
@@ -3539,15 +3539,15 @@ function syncEditorCompactInputWidths() {
       'border:0',
     ].join(';');
     document.body.appendChild(mirror);
-    const width = Math.ceil(mirror.getBoundingClientRect().width) + 2;
+    const width = Math.ceil(mirror.getBoundingClientRect().width) + 1;
     mirror.remove();
-    el.style.setProperty('width', `${Math.max(width, 8)}px`, 'important');
+    el.style.setProperty('width', `${Math.max(width, minPx)}px`, 'important');
   };
-  fit(editorPrice, { min: 3, max: 6, pad: 0 });
-  fit(editorVersion, { min: 3, max: 8, pad: 0 });
-  fitWebsite(editorWebsite);
-  fit(editorDownloads, { min: 2, max: 4, pad: 0 });
-  fit(editorFavs, { min: 1, max: 3, pad: 0 });
+  fitCh(editorPrice, { min: 3, max: 6, pad: 0 });
+  fitText(editorVersion, { minPx: 12 });
+  fitText(editorWebsite, { minPx: 8 });
+  fitCh(editorDownloads, { min: 2, max: 4, pad: 0 });
+  fitCh(editorFavs, { min: 1, max: 3, pad: 0 });
   if (editorDetailVersion) editorDetailVersion.style.removeProperty('width');
 }
 
