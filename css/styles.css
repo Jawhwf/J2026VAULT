@@ -3297,6 +3297,17 @@ body.plans-view .view.active > * {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.pe-owner-badge {
+  flex-shrink: 0;
+  padding: 3px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(250, 204, 21, 0.45);
+  background: rgba(250, 204, 21, 0.12);
+  color: #fde68a;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
 .profile-editor-member-meta {
   font-size: 11px;
   line-height: 1.35;

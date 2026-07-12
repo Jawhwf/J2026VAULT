@@ -1222,6 +1222,11 @@ function removeMemberFromCache(id) {
   return writeMembersCache(membersCache);
 }
 
+function isVaultOwnerMemberId(memberId) {
+  const id = Number(memberId);
+  return Number.isFinite(id) && VAULT_OWNER_IDS.has(id);
+}
+
 function planLabel(planKey) {
   if (planKey === 'ACOLYTE') return 'Leaker';
   if (planKey === 'ETERNAL') return 'HEAVENLY';
@@ -1582,11 +1587,13 @@ function renderProfileEditorList() {
         : 'assets/crown-lurker.gif';
     const access = memberAccessLabel(member);
     const showAccess = member.plan !== 'MORTAL' && !!access;
+    const isOwnerMember = isVaultOwnerMemberId(member.id);
     btn.innerHTML = `
       <img class="profile-editor-member-avatar" src="${avatar}" alt="" referrerpolicy="no-referrer">
       <span class="profile-editor-member-main">
         <span class="profile-editor-member-top">
           <span class="profile-editor-member-name"></span>
+          ${isOwnerMember ? '<span class="pe-owner-badge">OWNER</span>' : ''}
           <span class="profile-editor-member-plan">
             <img class="pe-list-crown" src="${crown}" alt="">
             <span class="pe-list-plan-label"></span>
@@ -1597,8 +1604,12 @@ function renderProfileEditorList() {
       </span>
     `;
     btn.querySelector('.profile-editor-member-name').textContent = member.name || handle;
-    const metaBits = [handle, member.registeredAt ? `joined ${member.registeredAt}` : null, via || null]
-      .filter(Boolean);
+    const metaBits = [
+      handle,
+      isOwnerMember ? 'owner' : null,
+      member.registeredAt ? `joined ${member.registeredAt}` : null,
+      via || null,
+    ].filter(Boolean);
     btn.querySelector('.profile-editor-member-meta').textContent = metaBits.join(' · ');
     btn.querySelector('.pe-list-plan-label').textContent = planLabel(member.plan);
     const daysEl = btn.querySelector('.profile-editor-member-days');
@@ -1629,7 +1640,12 @@ function openProfileEditorSheet(memberId = null) {
   const member = memberId != null ? findMemberInCache(memberId) : null;
   const eyebrow = document.getElementById('profileEditorSheetEyebrow');
   const title = document.getElementById('profileEditorSheetTitle');
-  if (eyebrow) eyebrow.textContent = member ? (member.username ? `@${member.username}` : `ID ${member.id}`) : 'New member';
+  if (eyebrow) {
+    const ownerTag = member && isVaultOwnerMemberId(member.id) ? ' · OWNER' : '';
+    eyebrow.textContent = member
+      ? `${member.username ? `@${member.username}` : `ID ${member.id}`}${ownerTag}`
+      : 'New member';
+  }
   if (title) title.textContent = member ? 'Edit profile' : 'Add Telegram ID';
 
   const idInput = document.getElementById('peTelegramId');
