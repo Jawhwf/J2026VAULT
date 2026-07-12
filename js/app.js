@@ -1575,38 +1575,41 @@ function renderProfileEditorList() {
     const avatar = member.avatarDataUrl || member.photoUrl || 'assets/pfp.png';
     const handle = member.username ? `@${member.username}` : `ID ${member.id}`;
     const via = member.firstSource || (member.sources && member.sources[0]) || '';
-    const seen = member.lastSeenAt ? ` · seen ${String(member.lastSeenAt).slice(0, 10)}` : '';
     const crown = member.plan === 'ETERNAL'
       ? 'assets/crown-heavenly.gif'
       : member.plan === 'ACOLYTE'
         ? 'assets/crown-leaker.gif'
         : 'assets/crown-lurker.gif';
+    const access = memberAccessLabel(member);
+    const showAccess = member.plan !== 'MORTAL' && !!access;
     btn.innerHTML = `
       <img class="profile-editor-member-avatar" src="${avatar}" alt="" referrerpolicy="no-referrer">
-      <span class="profile-editor-member-copy">
-        <span class="profile-editor-member-name"></span>
-        <span class="profile-editor-member-meta"></span>
-      </span>
-      <span class="profile-editor-member-side">
-        <span class="profile-editor-member-plan">
-          <img class="pe-list-crown" src="${crown}" alt="">
-          <span class="pe-list-plan-label"></span>
+      <span class="profile-editor-member-main">
+        <span class="profile-editor-member-top">
+          <span class="profile-editor-member-name"></span>
+          <span class="profile-editor-member-plan">
+            <img class="pe-list-crown" src="${crown}" alt="">
+            <span class="pe-list-plan-label"></span>
+          </span>
         </span>
-        <span class="profile-editor-member-days"></span>
+        <span class="profile-editor-member-meta"></span>
+        <span class="profile-editor-member-days" ${showAccess ? '' : 'hidden'}></span>
       </span>
     `;
     btn.querySelector('.profile-editor-member-name').textContent = member.name || handle;
-    btn.querySelector('.profile-editor-member-meta').textContent =
-      `${handle} · joined ${member.registeredAt || '—'}${via ? ` · ${via}` : ''}${seen}`;
+    const metaBits = [handle, member.registeredAt ? `joined ${member.registeredAt}` : null, via || null]
+      .filter(Boolean);
+    btn.querySelector('.profile-editor-member-meta').textContent = metaBits.join(' · ');
     btn.querySelector('.pe-list-plan-label').textContent = planLabel(member.plan);
-    btn.querySelector('.profile-editor-member-days').textContent = memberAccessLabel(member);
+    const daysEl = btn.querySelector('.profile-editor-member-days');
+    if (showAccess) daysEl.textContent = access;
     btn.addEventListener('click', () => openProfileEditorSheet(member.id));
 
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'pe-member-remove';
     removeBtn.setAttribute('aria-label', `Remove ${member.name || handle}`);
-    removeBtn.textContent = '×';
+    removeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path d="M18 6L6 18M6 6l12 12"/></svg>';
     removeBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();

@@ -3227,21 +3227,33 @@ body.plans-view .view.active > * {
 .profile-editor-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   padding-bottom: 28px;
 }
 .profile-editor-member-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: stretch;
-  gap: 8px;
+  gap: 0;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.profile-editor-member-row:hover {
+  border-color: var(--accent-line);
 }
 .profile-editor-member-row .profile-editor-member {
   flex: 1;
   min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 .profile-editor-member {
-  display: flex;
-  align-items: center;
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: start;
   gap: 12px;
   width: 100%;
   padding: 12px 12px 12px 14px;
@@ -3261,9 +3273,23 @@ body.plans-view .view.active > * {
   object-fit: cover;
   background: var(--surface-3);
   flex-shrink: 0;
+  margin-top: 1px;
 }
-.profile-editor-member-copy { flex: 1; min-width: 0; }
+.profile-editor-member-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.profile-editor-member-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .profile-editor-member-name {
+  flex: 1;
+  min-width: 0;
   font-size: 14px;
   font-weight: 800;
   color: #fff;
@@ -3273,23 +3299,17 @@ body.plans-view .view.active > * {
 }
 .profile-editor-member-meta {
   font-size: 11px;
+  line-height: 1.35;
   color: var(--text-muted);
-  margin-top: 3px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.profile-editor-member-side {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 4px;
-  flex-shrink: 0;
 }
 .profile-editor-member-plan {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  flex-shrink: 0;
   padding: 4px 8px;
   border-radius: 999px;
   border: 1px solid rgba(139, 92, 246, 0.45);
@@ -3310,6 +3330,26 @@ body.plans-view .view.active > * {
   font-size: 10px;
   font-weight: 600;
   color: var(--text-dim);
+}
+.profile-editor-member-days[hidden] {
+  display: none !important;
+}
+.pe-member-remove {
+  width: 44px;
+  min-height: 100%;
+  border: 0;
+  border-left: 1px solid var(--border);
+  border-radius: 0;
+  background: rgba(248, 113, 113, 0.06);
+  color: #f87171;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.pe-member-remove:active {
+  background: rgba(248, 113, 113, 0.14);
 }
 
 .profile-editor-sheet {
@@ -3425,21 +3465,6 @@ body.plans-view .view.active > * {
 }
 .pe-remove-btn:active {
   filter: brightness(1.08);
-}
-.pe-member-remove {
-  flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  border: 1px solid rgba(248, 113, 113, 0.35);
-  background: rgba(248, 113, 113, 0.08);
-  color: #f87171;
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 }
 .pe-number-input {
   appearance: auto;
