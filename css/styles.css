@@ -2997,6 +2997,7 @@ body.plans-view .view.active > * {
   border-radius: 999px;
   padding: 14px 22px;
   cursor: pointer;
+  pointer-events: auto;
   box-shadow: 0 14px 36px -14px var(--accent-glow), 0 0 0 1px var(--accent-line) inset;
   transition: filter 0.2s, box-shadow 0.2s, transform 0.15s;
 }
