@@ -27,11 +27,18 @@ const VAULT_OWNER_USERNAMES = new Set(
   VAULT_OWNERS.flatMap(o => (o.usernames || []).map(n => String(n || '').replace(/^@/, '').trim().toLowerCase()).filter(Boolean))
 );
 const VAULT_ADMIN_UNLOCK_KEY = 'j2026vault_admin_unlocked';
+const PROFILE_NAME_KEY = 'j2026vault_profile_name';
+const PROFILE_META_KEY = 'j2026vault_profile_meta';
+const MEMBERS_CACHE_KEY = 'j2026vault_members_cache';
+const MEMBERS_API_URL_KEY = 'j2026vault_members_api_url';
+const MEMBERS_JSON_URL = 'members.json';
 
 let telegramUser = null;
 let vaultAdminUnlocked = false;
 let vaultAdminPromptDismissed = false;
-const PROFILE_NAME_KEY = 'j2026vault_profile_name';
+let membersCache = [];
+let editingMemberId = null;
+let peAvatarDataUrl = null;
 
 /* Live catalog starts empty — only Vault Admin posts appear here. */
 const BASE_PRODUCTS = [];
@@ -888,6 +895,12 @@ function hideVaultAdminUiCompletely() {
     adminBtn.setAttribute('aria-hidden', 'true');
     adminBtn.classList.add('is-locked');
   }
+  const editorBtn = document.getElementById('openProfileEditorBtn');
+  if (editorBtn) {
+    editorBtn.hidden = true;
+    editorBtn.setAttribute('aria-hidden', 'true');
+    editorBtn.classList.add('is-locked');
+  }
   const fab = document.getElementById('adminFabBar');
   if (fab) {
     fab.hidden = true;
@@ -899,6 +912,7 @@ function hideVaultAdminUiCompletely() {
     overlay.setAttribute('aria-hidden', 'true');
     delete overlay.dataset.enterAdmin;
   }
+  closeProfileEditorSheet();
   setVaultOwnerSessionClass(false);
 }
 
@@ -955,13 +969,14 @@ function isLocalDevHost() {
 }
 
 function isTelegramGateBypassed() {
-  // No bypass — local file, localhost, and GitHub Pages all require Telegram.
+  // TEMP: local/file open for editing. Public GitHub URL stays gated.
+  if (isLocalDevHost()) return true;
   return false;
 }
 
 function shouldShowTelegramGate() {
-  // Blocks browser / local / GitHub visits unless Telegram opened the Mini App
-  // with a signed user session (initData + user).
+  if (isTelegramGateBypassed()) return false;
+  // Blocks browser visits unless Telegram opened the Mini App with a signed user session.
   return !isInsideTelegramMiniApp();
 }
 
@@ -1018,8 +1033,538 @@ function syncProfileFromTelegram(user) {
   if (!hasSavedName) nameInput.value = displayName.slice(0, 24);
 }
 
+/* ── Per-user profile + members registry ── */
+function formatRegisteredLabel(date = new Date()) {
+  const d = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(d.getTime())) return formatRegisteredLabel(new Date());
+  const dd = String(d.getDate()).padStart(2, '0');
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const yyyy = d.getFullYear();
+  return `${dd}.${mm}.${yyyy}`;
+}
+
+function parseRegisteredLabel(text) {
+  const m = String(text || '').trim().match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (!m) return null;
+  const day = Number(m[1]);
+  const month = Number(m[2]);
+  const year = Number(m[3]);
+  const d = new Date(year, month - 1, day);
+  if (d.getFullYear() !== year || d.getMonth() !== month - 1 || d.getDate() !== day) return null;
+  return formatRegisteredLabel(d);
+}
+
+function getTelegramInitData() {
+  return String(window.Telegram?.WebApp?.initData || '').trim();
+}
+
+function readMembersApiUrl() {
+  try {
+    return String(localStorage.getItem(MEMBERS_API_URL_KEY) || '').trim().replace(/\/$/, '');
+  } catch {
+    return '';
+  }
+}
+
+function writeMembersApiUrl(url) {
+  try {
+    const clean = String(url || '').trim().replace(/\/$/, '');
+    if (clean) localStorage.setItem(MEMBERS_API_URL_KEY, clean);
+    else localStorage.removeItem(MEMBERS_API_URL_KEY);
+  } catch {}
+}
+
+function profileStorageKey(user = telegramUser) {
+  const id = getTelegramUserId(user);
+  if (id != null) return `${PROFILE_META_KEY}:id:${id}`;
+  const name = getTelegramUsername(user);
+  if (name) return `${PROFILE_META_KEY}:user:${name}`;
+  return `${PROFILE_META_KEY}:guest`;
+}
+
+function defaultOwnProfile(user = telegramUser) {
+  const id = getTelegramUserId(user);
+  const username = getTelegramUsername(user);
+  const displayName = [user?.first_name, user?.last_name].filter(Boolean).join(' ')
+    || (username ? `@${username}` : 'Vault User');
+  return {
+    id: id,
+    username: username || '',
+    name: displayName.slice(0, 48),
+    photoUrl: user?.photo_url || '',
+    avatarDataUrl: null,
+    registeredAt: formatRegisteredLabel(new Date()),
+    downloads: 0,
+    purchases: 0,
+    plan: 'MORTAL',
+    endsAt: null,
+  };
+}
+
+function normalizeMemberRecord(raw, fallbackUser = null) {
+  const base = defaultOwnProfile(fallbackUser);
+  const src = raw && typeof raw === 'object' ? raw : {};
+  let id = Number(src.id);
+  if (!Number.isFinite(id) || id <= 0) id = base.id;
+  const plan = String(src.plan || 'MORTAL').toUpperCase();
+  return {
+    id: id ?? null,
+    username: String(src.username || base.username || '').replace(/^@/, '').trim(),
+    name: String(src.name || base.name || 'Vault User').slice(0, 48),
+    photoUrl: String(src.photoUrl || base.photoUrl || '').trim(),
+    avatarDataUrl: src.avatarDataUrl ? String(src.avatarDataUrl) : null,
+    registeredAt: parseRegisteredLabel(src.registeredAt) || base.registeredAt,
+    downloads: Math.max(0, Number(src.downloads) || 0),
+    purchases: Math.max(0, Number(src.purchases) || 0),
+    plan: ['MORTAL', 'ACOLYTE', 'ETERNAL'].includes(plan) ? plan : 'MORTAL',
+    endsAt: src.endsAt || null,
+  };
+}
+
+function readOwnProfileLocal() {
+  try {
+    const raw = localStorage.getItem(profileStorageKey());
+    if (!raw) return null;
+    return normalizeMemberRecord(JSON.parse(raw), telegramUser);
+  } catch {
+    return null;
+  }
+}
+
+function writeOwnProfileLocal(profile) {
+  const normalized = normalizeMemberRecord(profile, telegramUser);
+  try {
+    localStorage.setItem(profileStorageKey(), JSON.stringify(normalized));
+  } catch {}
+  return normalized;
+}
+
+function readMembersCache() {
+  try {
+    const raw = localStorage.getItem(MEMBERS_CACHE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    const list = Array.isArray(parsed) ? parsed : (parsed?.members || []);
+    return list.map(m => normalizeMemberRecord(m)).filter(m => m.id != null);
+  } catch {
+    return [];
+  }
+}
+
+function writeMembersCache(members) {
+  membersCache = (members || []).map(m => normalizeMemberRecord(m)).filter(m => m.id != null);
+  try {
+    localStorage.setItem(MEMBERS_CACHE_KEY, JSON.stringify({
+      updatedAt: new Date().toISOString(),
+      members: membersCache,
+    }));
+  } catch {}
+  return membersCache;
+}
+
+function findMemberInCache(id) {
+  const num = Number(id);
+  return membersCache.find(m => Number(m.id) === num) || null;
+}
+
+function upsertMemberInCache(member) {
+  const normalized = normalizeMemberRecord(member);
+  if (normalized.id == null) return membersCache;
+  const idx = membersCache.findIndex(m => Number(m.id) === Number(normalized.id));
+  if (idx >= 0) membersCache[idx] = { ...membersCache[idx], ...normalized };
+  else membersCache.push(normalized);
+  return writeMembersCache(membersCache);
+}
+
+function removeMemberFromCache(id) {
+  const num = Number(id);
+  membersCache = membersCache.filter(m => Number(m.id) !== num);
+  return writeMembersCache(membersCache);
+}
+
+function planLabel(planKey) {
+  if (planKey === 'ACOLYTE') return 'Leaker';
+  if (planKey === 'ETERNAL') return 'HEAVENLY';
+  return 'Lurker';
+}
+
+function setRegisteredLabel(text) {
+  const el = document.getElementById('profileRegistered');
+  if (el) el.textContent = `Registered ${text || '—'}`;
+}
+
+function applyProfileRecordToUi(profile, { syncName = true } = {}) {
+  if (!profile) return;
+  setRegisteredLabel(profile.registeredAt);
+  userStats.downloads = profile.downloads || 0;
+  userStats.purchases = profile.purchases || 0;
+  updateProfileStats();
+
+  const avatar = document.getElementById('profileAvatar');
+  if (avatar) {
+    const src = profile.avatarDataUrl || profile.photoUrl || avatar.src || 'assets/pfp.png';
+    avatar.src = src;
+    if (profile.photoUrl) avatar.referrerPolicy = 'no-referrer';
+  }
+
+  if (syncName) {
+    const nameInput = document.getElementById('profileNameInput');
+    if (nameInput && profile.name) {
+      let hasSavedName = false;
+      try { hasSavedName = !!localStorage.getItem(PROFILE_NAME_KEY); } catch {}
+      // Prefer member-registry / owner edits over a stale local name when coming from shared record
+      if (!hasSavedName || profile._forceName) nameInput.value = String(profile.name).slice(0, 24);
+    }
+  }
+
+  if (profile.plan && profile.plan !== 'MORTAL') {
+    const meta = PLAN_META[profile.plan];
+    subscription = {
+      plan: profile.plan,
+      credits: meta?.credits ?? 0,
+      endsAt: profile.endsAt ? new Date(profile.endsAt) : (meta?.forever ? null : subscription.endsAt),
+    };
+    if (profile.endsAt) subscription.endsAt = new Date(profile.endsAt);
+    else if (meta?.forever) subscription.endsAt = null;
+    else if (!subscription.endsAt && meta?.days) {
+      subscription.endsAt = new Date(Date.now() + meta.days * 86400000);
+    }
+    subscribed = true;
+  } else {
+    subscribed = false;
+    subscription = { plan: null, endsAt: null, credits: 0 };
+  }
+  updatePremiumUI();
+  updatePlansPageUI();
+  filterProducts();
+}
+
+function captureOwnProfileFromUi() {
+  const local = readOwnProfileLocal() || defaultOwnProfile(telegramUser);
+  const nameInput = document.getElementById('profileNameInput');
+  const avatar = document.getElementById('profileAvatar');
+  const avatarSrc = avatar?.src || '';
+  const isData = avatarSrc.startsWith('data:');
+  return normalizeMemberRecord({
+    ...local,
+    id: getTelegramUserId(telegramUser) ?? local.id,
+    username: getTelegramUsername(telegramUser) || local.username,
+    name: (nameInput?.value || local.name || 'Vault User').trim().slice(0, 48),
+    photoUrl: (!isData && avatarSrc && !avatarSrc.includes('assets/pfp.png')) ? avatarSrc : (telegramUser?.photo_url || local.photoUrl || ''),
+    avatarDataUrl: isData ? avatarSrc : local.avatarDataUrl,
+    registeredAt: local.registeredAt || formatRegisteredLabel(new Date()),
+    downloads: userStats.downloads,
+    purchases: userStats.purchases,
+    plan: getActivePlanName(),
+    endsAt: subscription.endsAt ? new Date(subscription.endsAt).toISOString() : null,
+  }, telegramUser);
+}
+
+function persistOwnProfileFromUi() {
+  const profile = captureOwnProfileFromUi();
+  writeOwnProfileLocal(profile);
+  upsertMemberInCache(profile);
+  return profile;
+}
+
+async function membersApiFetch(path, { method = 'GET', body = null } = {}) {
+  const base = readMembersApiUrl();
+  if (!base) throw new Error('No members API URL');
+  const initData = getTelegramInitData();
+  if (!initData) throw new Error('Missing Telegram initData');
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Telegram-Init-Data': initData,
+    },
+    body: body == null ? undefined : JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || data?.ok === false) {
+    throw new Error(data?.error || `Members API ${res.status}`);
+  }
+  return data;
+}
+
+async function fetchMembersJsonFile() {
+  const url = `${MEMBERS_JSON_URL}${MEMBERS_JSON_URL.includes('?') ? '&' : '?'}t=${Date.now()}`;
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error('members.json missing');
+  const data = await res.json();
+  const list = Array.isArray(data) ? data : (data?.members || []);
+  return list.map(m => normalizeMemberRecord(m)).filter(m => m.id != null);
+}
+
+async function refreshMembersList() {
+  membersCache = readMembersCache();
+  try {
+    if (readMembersApiUrl()) {
+      const data = await membersApiFetch('/api/members');
+      if (Array.isArray(data.members)) writeMembersCache(data.members);
+    }
+  } catch {
+    try {
+      const list = await fetchMembersJsonFile();
+      if (list.length) writeMembersCache(mergeMembersLists(membersCache, list));
+    } catch {}
+  }
+  return membersCache;
+}
+
+function mergeMembersLists(a, b) {
+  const map = new Map();
+  [...(a || []), ...(b || [])].forEach(m => {
+    const n = normalizeMemberRecord(m);
+    if (n.id == null) return;
+    const prev = map.get(n.id);
+    map.set(n.id, prev ? { ...prev, ...n } : n);
+  });
+  return [...map.values()];
+}
+
+async function ensureOwnProfileLoaded() {
+  membersCache = readMembersCache();
+  const existingLocal = readOwnProfileLocal();
+  let local = existingLocal || defaultOwnProfile(telegramUser);
+  if (!existingLocal) {
+    // First open for this Telegram account → registration is today
+    local.registeredAt = formatRegisteredLabel(new Date());
+    writeOwnProfileLocal(local);
+  }
+
+  const myId = getTelegramUserId(telegramUser);
+  let shared = myId != null ? findMemberInCache(myId) : null;
+
+  try {
+    if (readMembersApiUrl()) {
+      const data = await membersApiFetch('/api/me');
+      if (data.member) {
+        shared = normalizeMemberRecord(data.member, telegramUser);
+        upsertMemberInCache(shared);
+      }
+    } else {
+      const list = await fetchMembersJsonFile();
+      writeMembersCache(mergeMembersLists(membersCache, list));
+      shared = myId != null ? findMemberInCache(myId) : shared;
+    }
+  } catch {}
+
+  const merged = normalizeMemberRecord({
+    ...local,
+    ...(shared || {}),
+    registeredAt: shared?.registeredAt || local.registeredAt,
+    id: myId ?? local.id,
+    username: getTelegramUsername(telegramUser) || shared?.username || local.username,
+  }, telegramUser);
+
+  writeOwnProfileLocal(merged);
+  upsertMemberInCache(merged);
+  applyProfileRecordToUi({ ...merged, _forceName: !!shared?.name }, { syncName: true });
+  return merged;
+}
+
+async function heartbeatOwnProfile() {
+  const profile = persistOwnProfileFromUi();
+  try {
+    if (readMembersApiUrl()) {
+      const data = await membersApiFetch('/api/me/sync', { method: 'POST', body: profile });
+      if (data.member) {
+        const remote = normalizeMemberRecord(data.member, telegramUser);
+        writeOwnProfileLocal(remote);
+        upsertMemberInCache(remote);
+        applyProfileRecordToUi({ ...remote, _forceName: true });
+      }
+    }
+  } catch {}
+  return profile;
+}
+
+function downloadMembersJson(members = membersCache) {
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    members: (members || []).map(m => normalizeMemberRecord(m)).filter(m => m.id != null),
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2) + '\n'], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'members.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return payload;
+}
+
+function renderProfileEditorList() {
+  const listEl = document.getElementById('profileEditorList');
+  const emptyEl = document.getElementById('profileEditorEmpty');
+  const subtitle = document.getElementById('profileEditorSubtitle');
+  if (!listEl) return;
+  const members = [...membersCache].sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+  if (subtitle) subtitle.textContent = `${members.length} member${members.length === 1 ? '' : 's'} registered`;
+  listEl.innerHTML = '';
+  if (!members.length) {
+    if (emptyEl) emptyEl.hidden = false;
+    return;
+  }
+  if (emptyEl) emptyEl.hidden = true;
+  members.forEach(member => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'profile-editor-member';
+    btn.dataset.memberId = String(member.id);
+    const avatar = member.avatarDataUrl || member.photoUrl || 'assets/pfp.png';
+    const uname = member.username ? `@${member.username}` : `id ${member.id}`;
+    btn.innerHTML = `
+      <img class="profile-editor-member-avatar" src="${avatar}" alt="" referrerpolicy="no-referrer">
+      <span class="profile-editor-member-copy">
+        <span class="profile-editor-member-name"></span>
+        <span class="profile-editor-member-meta"></span>
+      </span>
+      <span class="profile-editor-member-plan"></span>
+    `;
+    btn.querySelector('.profile-editor-member-name').textContent = member.name || 'User';
+    btn.querySelector('.profile-editor-member-meta').textContent =
+      `${uname} · Reg ${member.registeredAt} · ${member.downloads} dl · ${member.purchases} buy`;
+    btn.querySelector('.profile-editor-member-plan').textContent = planLabel(member.plan);
+    btn.addEventListener('click', () => openProfileEditorSheet(member.id));
+    listEl.appendChild(btn);
+  });
+}
+
+function openProfileEditorSheet(memberId = null) {
+  const sheet = document.getElementById('profileEditorSheet');
+  if (!sheet) return;
+  editingMemberId = memberId;
+  const member = memberId != null ? findMemberInCache(memberId) : null;
+  peAvatarDataUrl = member?.avatarDataUrl || null;
+
+  const title = document.getElementById('profileEditorSheetTitle');
+  if (title) title.textContent = member ? 'Edit member' : 'Add member';
+  document.getElementById('peTelegramId').value = member?.id ?? '';
+  document.getElementById('peTelegramId').disabled = !!member;
+  document.getElementById('peUsername').value = member?.username || '';
+  document.getElementById('peName').value = member?.name || '';
+  document.getElementById('peRegistered').value = member?.registeredAt || formatRegisteredLabel(new Date());
+  document.getElementById('peDownloads').value = member?.downloads ?? 0;
+  document.getElementById('pePurchases').value = member?.purchases ?? 0;
+  document.getElementById('pePlan').value = member?.plan || 'MORTAL';
+  document.getElementById('peAvatarPreview').src = member?.avatarDataUrl || member?.photoUrl || 'assets/pfp.png';
+  document.getElementById('peDeleteBtn').hidden = !member;
+  const err = document.getElementById('peError');
+  if (err) { err.hidden = true; err.textContent = ''; }
+  sheet.hidden = false;
+}
+
+function closeProfileEditorSheet() {
+  const sheet = document.getElementById('profileEditorSheet');
+  if (sheet) sheet.hidden = true;
+  editingMemberId = null;
+  peAvatarDataUrl = null;
+}
+
+async function saveProfileEditorMember() {
+  const err = document.getElementById('peError');
+  const idVal = Number(document.getElementById('peTelegramId').value);
+  if (!Number.isFinite(idVal) || idVal <= 0) {
+    if (err) { err.textContent = 'Enter a valid Telegram ID'; err.hidden = false; }
+    return;
+  }
+  const registeredAt = parseRegisteredLabel(document.getElementById('peRegistered').value)
+    || formatRegisteredLabel(new Date());
+  const member = normalizeMemberRecord({
+    id: idVal,
+    username: document.getElementById('peUsername').value,
+    name: document.getElementById('peName').value,
+    registeredAt,
+    downloads: document.getElementById('peDownloads').value,
+    purchases: document.getElementById('pePurchases').value,
+    plan: document.getElementById('pePlan').value,
+    avatarDataUrl: peAvatarDataUrl,
+    photoUrl: (!peAvatarDataUrl && document.getElementById('peAvatarPreview').src?.startsWith('http'))
+      ? document.getElementById('peAvatarPreview').src
+      : (findMemberInCache(idVal)?.photoUrl || ''),
+    endsAt: document.getElementById('pePlan').value === 'ETERNAL'
+      ? null
+      : (document.getElementById('pePlan').value === 'ACOLYTE'
+        ? new Date(Date.now() + 30 * 86400000).toISOString()
+        : null),
+  });
+
+  upsertMemberInCache(member);
+
+  // If editing the currently logged-in user, apply live
+  if (getTelegramUserId(telegramUser) === member.id) {
+    writeOwnProfileLocal(member);
+    applyProfileRecordToUi({ ...member, _forceName: true });
+  }
+
+  try {
+    if (readMembersApiUrl()) {
+      await membersApiFetch(`/api/members/${member.id}`, { method: 'PUT', body: member });
+      await refreshMembersList();
+    }
+  } catch (e) {
+    showToast('Saved locally — publish members.json or set API URL');
+  }
+
+  closeProfileEditorSheet();
+  renderProfileEditorList();
+  showToast(`Saved ${member.name}`);
+}
+
+async function deleteProfileEditorMember() {
+  if (editingMemberId == null) return;
+  removeMemberFromCache(editingMemberId);
+  try {
+    if (readMembersApiUrl()) {
+      // No delete endpoint — publish full list instead
+      await membersApiFetch('/api/members', { method: 'PUT', body: { members: membersCache } });
+    }
+  } catch {}
+  closeProfileEditorSheet();
+  renderProfileEditorList();
+  showToast('Member removed');
+}
+
+async function openProfileEditor() {
+  if (!canAccessVaultAdmin()) {
+    if (isVaultOwnerIdentity()) {
+      promptVaultAdminUnlock({ enterAdmin: false });
+      return;
+    }
+    hideVaultAdminUiCompletely();
+    return;
+  }
+  const apiInput = document.getElementById('profileEditorApiUrl');
+  if (apiInput) apiInput.value = readMembersApiUrl();
+  showView('profile-editor');
+  showToast('Loading members…');
+  await refreshMembersList();
+  renderProfileEditorList();
+}
+
+async function publishMembersList() {
+  writeMembersCache(membersCache);
+  try {
+    if (readMembersApiUrl()) {
+      await membersApiFetch('/api/members', { method: 'PUT', body: { members: membersCache } });
+      showToast('Members published to API');
+    } else {
+      downloadMembersJson(membersCache);
+      showToast('Downloaded members.json — upload it next to index.html');
+    }
+  } catch {
+    downloadMembersJson(membersCache);
+    showToast('Downloaded members.json — upload it next to index.html');
+  }
+}
+
 function applyVaultAdminAccess() {
   const adminBtn = document.getElementById('openVaultAdminBtn');
+  const editorBtn = document.getElementById('openProfileEditorBtn');
   const isOwner = isVaultOwnerIdentity();
   setVaultOwnerSessionClass(isOwner);
 
@@ -1027,22 +1572,22 @@ function applyVaultAdminAccess() {
   if (!isOwner) {
     vaultAdminUnlocked = false;
     hideVaultAdminUiCompletely();
-    if (typeof currentView !== 'undefined' && (currentView === 'admin' || currentView === 'admin-editor')) {
+    if (typeof currentView !== 'undefined'
+      && (currentView === 'admin' || currentView === 'admin-editor' || currentView === 'profile-editor')) {
       showView('profile');
     }
     return;
   }
 
-  // Owners only: show the profile entry after password unlock.
+  // Owners only: show admin entries after password unlock.
   const canAdmin = canAccessVaultAdmin() && !vaultAdminPromptDismissed;
 
-  if (adminBtn) {
-    adminBtn.hidden = !canAdmin;
-    adminBtn.setAttribute('aria-hidden', canAdmin ? 'false' : 'true');
-    adminBtn.classList.toggle('is-locked', !canAdmin);
-    const sub = adminBtn.querySelector('.admin-entry-sub');
-    if (sub) sub.textContent = 'Add, edit, and publish listings';
-  }
+  [adminBtn, editorBtn].forEach(btn => {
+    if (!btn) return;
+    btn.hidden = !canAdmin;
+    btn.setAttribute('aria-hidden', canAdmin ? 'false' : 'true');
+    btn.classList.toggle('is-locked', !canAdmin);
+  });
 }
 
 function openAdminPasswordModal({ focus = true } = {}) {
@@ -1088,6 +1633,11 @@ function dismissAdminPasswordPrompt() {
   if (adminBtn) {
     adminBtn.hidden = true;
     adminBtn.setAttribute('aria-hidden', 'true');
+  }
+  const editorBtn = document.getElementById('openProfileEditorBtn');
+  if (editorBtn) {
+    editorBtn.hidden = true;
+    editorBtn.setAttribute('aria-hidden', 'true');
   }
   applyVaultAdminAccess();
 }
@@ -1153,10 +1703,10 @@ function maybePromptOwnerPassword() {
 }
 
 function guardVaultAdminAccess(viewName) {
-  if (viewName !== 'admin' && viewName !== 'admin-editor') return true;
+  if (viewName !== 'admin' && viewName !== 'admin-editor' && viewName !== 'profile-editor') return true;
   if (canAccessVaultAdmin()) return true;
   if (isVaultOwnerIdentity()) {
-    promptVaultAdminUnlock({ enterAdmin: true });
+    promptVaultAdminUnlock({ enterAdmin: viewName === 'admin' || viewName === 'admin-editor' });
     return false;
   }
   // Non-owners: silent deny — do not toast or reveal Vault Admin
@@ -1258,6 +1808,8 @@ function applySubscription(planName) {
   updatePremiumUI();
   updatePlansPageUI();
   filterProducts();
+  persistOwnProfileFromUi();
+  heartbeatOwnProfile();
 }
 
 function getActivePlanName() {
@@ -1657,6 +2209,8 @@ function updateNavBadges() {
 function startDownload(product) {
   userStats.downloads++;
   updateProfileStats();
+  persistOwnProfileFromUi();
+  heartbeatOwnProfile();
   const wasNew = !library.has(product.id);
   library.add(product.id);
   renderPurchases();
@@ -3868,16 +4422,20 @@ function showView(name) {
   views.forEach(v => v.classList.toggle('active', v.dataset.view === name));
   navItems.forEach(n => {
     const nav = n.dataset.nav;
-    n.classList.toggle('active', nav === name || (nav === 'profile' && (name === 'admin' || name === 'admin-editor')));
+    n.classList.toggle(
+      'active',
+      nav === name || (nav === 'profile' && (name === 'admin' || name === 'admin-editor' || name === 'profile-editor'))
+    );
   });
   if (name !== 'product' && name !== 'plans') {
     currentView = name;
-    if (name !== 'admin-editor') previousView = name;
+    if (name !== 'admin-editor' && name !== 'profile-editor') previousView = name;
   }
   if (name === 'purchases') purchasesSeenCount = library.size;
   if (name === 'favourites') favoritesSeenCount = favorites.size;
   if (name === 'admin') renderAdminPanel();
   if (name === 'profile') applyVaultAdminAccess();
+  if (name === 'profile-editor') renderProfileEditorList();
   const showAdminFab = name === 'admin' && canAccessVaultAdmin();
   document.getElementById('adminFabBar')?.toggleAttribute('hidden', !showAdminFab);
   updateNavBadges();
@@ -4544,7 +5102,50 @@ document.getElementById('openVaultAdminBtn')?.addEventListener('click', () => {
   }
   promptVaultAdminUnlock({ enterAdmin: true });
 });
+document.getElementById('openProfileEditorBtn')?.addEventListener('click', () => {
+  if (canAccessVaultAdmin()) {
+    openProfileEditor();
+    return;
+  }
+  promptVaultAdminUnlock({ enterAdmin: false });
+});
 document.getElementById('adminBackBtn')?.addEventListener('click', () => showView('profile'));
+document.getElementById('profileEditorBack')?.addEventListener('click', () => {
+  closeProfileEditorSheet();
+  showView('profile');
+});
+document.getElementById('profileEditorRefresh')?.addEventListener('click', async () => {
+  await refreshMembersList();
+  renderProfileEditorList();
+  showToast('Members refreshed');
+});
+document.getElementById('profileEditorAddBtn')?.addEventListener('click', () => openProfileEditorSheet(null));
+document.getElementById('profileEditorPublishBtn')?.addEventListener('click', () => publishMembersList());
+document.getElementById('profileEditorApiSave')?.addEventListener('click', () => {
+  writeMembersApiUrl(document.getElementById('profileEditorApiUrl')?.value || '');
+  showToast(readMembersApiUrl() ? 'API URL saved' : 'API URL cleared');
+});
+document.getElementById('profileEditorSheetClose')?.addEventListener('click', () => closeProfileEditorSheet());
+document.getElementById('peSaveBtn')?.addEventListener('click', () => saveProfileEditorMember());
+document.getElementById('peDeleteBtn')?.addEventListener('click', () => deleteProfileEditorMember());
+document.getElementById('peAvatarPick')?.addEventListener('click', () => document.getElementById('peAvatarFile')?.click());
+document.getElementById('peAvatarClear')?.addEventListener('click', () => {
+  peAvatarDataUrl = null;
+  const preview = document.getElementById('peAvatarPreview');
+  if (preview) preview.src = 'assets/pfp.png';
+});
+document.getElementById('peAvatarFile')?.addEventListener('change', e => {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    peAvatarDataUrl = String(reader.result || '');
+    const preview = document.getElementById('peAvatarPreview');
+    if (preview) preview.src = peAvatarDataUrl;
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+});
 
 document.getElementById('adminPasswordSubmit')?.addEventListener('click', () => submitAdminPassword());
 document.getElementById('adminPasswordClose')?.addEventListener('click', () => {
@@ -5344,6 +5945,8 @@ function refreshBuyButton(product) {
       owned.add(product.id);
       userStats.purchases++;
       updateProfileStats();
+      persistOwnProfileFromUi();
+      heartbeatOwnProfile();
       library.add(product.id);
       renderPurchases();
       filterProducts();
@@ -5521,6 +6124,8 @@ function saveProfileName() {
   const val = profileNameInput.value.trim() || 'J2026Vault';
   profileNameInput.value = val;
   try { localStorage.setItem(PROFILE_NAME_KEY, val); } catch {}
+  persistOwnProfileFromUi();
+  heartbeatOwnProfile();
 }
 
 if (profileNameInput) {
@@ -5546,10 +6151,18 @@ document.getElementById('avatarInput').addEventListener('change', e => {
     e.target.value = '';
     return;
   }
-  if (avatarObjectUrl) URL.revokeObjectURL(avatarObjectUrl);
-  avatarObjectUrl = URL.createObjectURL(file);
-  document.getElementById('profileAvatar').src = avatarObjectUrl;
-  showToast('Profile picture updated');
+  const reader = new FileReader();
+  reader.onload = () => {
+    const dataUrl = String(reader.result || '');
+    document.getElementById('profileAvatar').src = dataUrl;
+    const local = captureOwnProfileFromUi();
+    local.avatarDataUrl = dataUrl;
+    writeOwnProfileLocal(local);
+    upsertMemberInCache(local);
+    heartbeatOwnProfile();
+    showToast('Profile picture updated');
+  };
+  reader.readAsDataURL(file);
   e.target.value = '';
 });
 
@@ -5615,6 +6228,15 @@ function initApp() {
   applyVaultAdminAccess();
   loadCatalogProducts();
   loadProfileName();
+  const apiInput = document.getElementById('profileEditorApiUrl');
+  if (apiInput) apiInput.value = readMembersApiUrl();
+
+  // Load accurate registration + shared member overrides, then heartbeat
+  Promise.resolve()
+    .then(() => ensureOwnProfileLoaded())
+    .then(() => heartbeatOwnProfile())
+    .catch(() => {});
+
   updateProfileStats();
   updateNavBadges();
   updatePremiumUI();
