@@ -2575,6 +2575,8 @@ img[src*="crown-lurker"] {
   color: var(--text-muted);
   line-height: 1.35;
   max-width: 118px;
+  text-align: center;
+  word-break: break-word;
 }
 @keyframes folderItemIn {
   from {

@@ -242,15 +242,27 @@ function introTextToHtml(raw) {
 }
 
 function sanitizeAboutRichHtml(html) {
-  const allowed = new Set(['B', 'I', 'U', 'STRONG', 'EM', 'P', 'BR', 'SPAN', 'DIV', 'SVG', 'TEXT', 'IMG']);
+  const allowed = new Set(['B', 'I', 'U', 'STRONG', 'EM', 'P', 'BR', 'SPAN', 'DIV', 'SVG', 'TEXT', 'IMG', 'BUTTON']);
   const wrap = document.createElement('div');
   wrap.innerHTML = html || '';
+  // Keep images; unwrap editor-only replace buttons so product view stays intact
+  wrap.querySelectorAll('.about-media-item-img-btn').forEach(btn => {
+    const img = btn.querySelector('.about-media-item-img') || btn.querySelector('img');
+    if (img) btn.replaceWith(img);
+    else btn.remove();
+  });
+  wrap.querySelectorAll('.about-media-item-replace').forEach(el => el.remove());
   const walk = node => {
     [...node.childNodes].forEach(child => {
       if (child.nodeType === Node.ELEMENT_NODE && !allowed.has(child.tagName)) {
         const text = document.createTextNode(child.textContent || '');
         child.replaceWith(text);
       } else if (child.nodeType === Node.ELEMENT_NODE) {
+        if (child.tagName === 'BUTTON' && !child.classList.contains('about-media-item-img-btn')) {
+          const text = document.createTextNode(child.textContent || '');
+          child.replaceWith(text);
+          return;
+        }
         walk(child);
       }
     });
@@ -259,9 +271,11 @@ function sanitizeAboutRichHtml(html) {
   return wrap.innerHTML;
 }
 
-function renderAboutInsideSection(bodyHtml, bodyPlain, heading = "What's Inside?") {
+function renderAboutInsideSection(bodyHtml, bodyPlain, heading = "What's Inside?", itemsOverride = null) {
   const safeHeading = (heading || '').trim() || "What's Inside?";
-  const mediaItems = parseAboutMediaItemsFromHtml(bodyHtml);
+  const mediaItems = Array.isArray(itemsOverride) && itemsOverride.length
+    ? itemsOverride
+    : parseAboutMediaItemsFromHtml(bodyHtml);
   if (mediaItems.length) {
     return renderAboutFolderWidget({ heading: safeHeading, items: mediaItems });
   }
@@ -391,13 +405,12 @@ function readImageFilesSequential(files, onDone) {
       next();
       return;
     }
-    const reader = new FileReader();
-    reader.onload = () => {
-      results.push({ src: reader.result, name: aboutFileToProductName(file) });
-      next();
-    };
-    reader.onerror = next;
-    reader.readAsDataURL(file);
+    compressAboutIconFile(file)
+      .then(src => {
+        results.push({ src, name: aboutFileToProductName(file) });
+        next();
+      })
+      .catch(() => next());
   };
   next();
 }
@@ -492,9 +505,15 @@ function renderProductAbout(about, product = null) {
   }
 
   const { intro, hasInside, body } = parseAboutPlainText(raw);
-  if (hasInside) {
+  const insideItems = getResolvedAboutInsideItems(product);
+  if (hasInside || insideItems.length || product?.aboutInsideHtml?.trim()) {
     const introHtml = renderAboutIntroHtml(product?.aboutIntroHtml, intro);
-    const insideHtml = renderAboutInsideSection(getResolvedAboutInsideHtml(product), body, product?.aboutInsideHeading);
+    const insideHtml = renderAboutInsideSection(
+      getResolvedAboutInsideHtml(product),
+      body,
+      product?.aboutInsideHeading,
+      insideItems
+    );
     return introHtml + insideHtml;
   }
 
@@ -583,14 +602,45 @@ function renderBundleFolderAbout(items = []) {
 function parseAboutMediaItemsFromHtml(html) {
   const wrap = document.createElement('div');
   wrap.innerHTML = html || '';
+  wrap.querySelectorAll('.about-media-item-img-btn').forEach(btn => {
+    const img = btn.querySelector('.about-media-item-img') || btn.querySelector('img');
+    if (img) btn.replaceWith(img);
+    else btn.remove();
+  });
+  wrap.querySelectorAll('.about-media-item-replace').forEach(el => el.remove());
+
   return [...wrap.querySelectorAll('.about-media-item')].map(item => {
-    const img = item.querySelector('.about-media-item-img');
+    const img = item.querySelector('.about-media-item-img') || item.querySelector('img');
     const nameEl = item.querySelector('.about-media-item-name');
+    let name = (nameEl?.textContent || '').replace(/\u00a0/g, ' ').trim();
+    if (!name) {
+      const clone = item.cloneNode(true);
+      clone.querySelectorAll('img, svg, button, .about-media-item-replace').forEach(n => n.remove());
+      name = (clone.textContent || '').replace(/\u00a0/g, ' ').trim();
+    }
+    name = name.replace(/^•\s*/, '').trim();
     return {
       src: img?.getAttribute('src') || '',
-      name: (nameEl?.textContent || '').trim(),
+      name,
     };
   }).filter(item => item.src || item.name);
+}
+
+function getResolvedAboutInsideItems(product) {
+  const structured = Array.isArray(product?.aboutInsideItems)
+    ? product.aboutInsideItems
+      .map(item => ({
+        src: String(item?.src || item?.icon || '').trim(),
+        name: String(item?.name || '').replace(/^•\s*/, '').trim(),
+      }))
+      .filter(item => item.src || item.name)
+    : [];
+  if (structured.length) return structured;
+  return parseAboutMediaItemsFromHtml(getResolvedAboutInsideHtml(product));
+}
+
+function collectAboutInsideItemsFromEditor() {
+  return parseAboutMediaItemsFromHtml(serializeEditorAboutInsideHtml());
 }
 
 function renderAboutFolderRow(item) {
@@ -1693,6 +1743,64 @@ async function compressImageFileToDataUrl(file, maxSide = 256, quality = 0.82) {
     img.onerror = () => resolve(dataUrl);
     img.src = dataUrl;
   });
+}
+
+/** Small icons for What's Inside — keep tiny GIFs animated, otherwise jpeg. */
+async function compressAboutIconFile(file) {
+  const isGif = file.type === 'image/gif' || /\.gif$/i.test(file.name || '');
+  if (isGif && file.size <= 250 * 1024) {
+    return readFileAsDataUrl(file);
+  }
+  return compressImageFileToDataUrl(file, 160, 0.8);
+}
+
+async function compressDataUrlImage(dataUrl, maxSide = 160, quality = 0.8) {
+  const raw = String(dataUrl || '');
+  if (!raw.startsWith('data:image') || raw.startsWith('data:image/svg')) return raw;
+  // Already small enough
+  if (raw.length < 40_000) return raw;
+  return await new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const scale = Math.min(1, maxSide / Math.max(img.width || 1, img.height || 1));
+      const w = Math.max(1, Math.round((img.width || 1) * scale));
+      const h = Math.max(1, Math.round((img.height || 1) * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = w;
+      canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      try {
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      } catch {
+        resolve(raw);
+      }
+    };
+    img.onerror = () => resolve(raw);
+    img.src = raw;
+  });
+}
+
+async function compressAboutInsidePayload(html, items) {
+  const list = Array.isArray(items) ? items : parseAboutMediaItemsFromHtml(html);
+  const compressed = [];
+  for (const item of list) {
+    const src = item.src?.startsWith('data:image')
+      ? await compressDataUrlImage(item.src, 160, 0.8)
+      : (item.src || '');
+    compressed.push({
+      src,
+      name: String(item.name || '').replace(/^•\s*/, '').trim(),
+    });
+  }
+  const nextHtml = compressed.length
+    ? buildAboutMediaListHtml(compressed.map(item => ({
+      src: item.src,
+      name: item.name || 'Product name',
+      indent: 0,
+    })))
+    : (html || '');
+  return { html: nextHtml, items: compressed };
 }
 
 function renderProfileEditorList() {
@@ -4698,6 +4806,7 @@ function buildDraftFromEditor() {
     tags: detailsOn ? getEditorTags() : [],
     about: aboutOn ? (editorAbout.value.trim() || '') : '',
     aboutInsideHtml: aboutOn && editorAboutInsideHtml?.value?.trim() ? editorAboutInsideHtml.value : undefined,
+    aboutInsideItems: aboutOn ? collectAboutInsideItemsFromEditor() : undefined,
     aboutInsideHeading: aboutOn && editorAboutInsideWrap && !editorAboutInsideWrap.hidden
       ? getEditorInsideHeading()
       : undefined,
@@ -4922,16 +5031,41 @@ function readLocalCatalogProducts() {
   }
 }
 
-function writeLocalCatalogProducts(list) {
+function writeLocalCatalogProducts(list, { quiet = false } = {}) {
   const live = normalizeCatalogList(list);
   try {
     localStorage.setItem(CATALOG_STORAGE_KEY, JSON.stringify(live));
     return true;
   } catch (err) {
     console.warn('catalog localStorage save failed', err);
-    showToast('Catalog too large for this device — keep API/tunnel on and re-upload products.json');
+    if (!quiet) {
+      showToast('Catalog too large for this device — keep API/tunnel on and re-upload products.json');
+    }
     return false;
   }
+}
+
+function slimCatalogForLocalStorage(list) {
+  return normalizeCatalogList(list).map(p => {
+    const next = { ...p };
+    // Keep structured names; drop huge inline images from the local cache only
+    if (Array.isArray(next.aboutInsideItems)) {
+      next.aboutInsideItems = next.aboutInsideItems.map(item => ({
+        src: (item?.src && !String(item.src).startsWith('data:')) ? item.src : '',
+        name: item?.name || '',
+      }));
+    }
+    if (typeof next.aboutInsideHtml === 'string' && next.aboutInsideHtml.includes('data:image')) {
+      next.aboutInsideHtml = next.aboutInsideHtml.replace(/src="data:image[^"]*"/gi, 'src=""');
+    }
+    if (typeof next.coverImage === 'string' && next.coverImage.startsWith('data:') && next.coverImage.length > 180_000) {
+      delete next.coverImage;
+    }
+    if (typeof next.authorIcon === 'string' && next.authorIcon.startsWith('data:') && next.authorIcon.length > 80_000) {
+      delete next.authorIcon;
+    }
+    return next;
+  });
 }
 
 async function fetchCatalogJsonFile() {
@@ -4968,21 +5102,33 @@ async function saveCatalogProducts() {
     updatedAt: p.updatedAt || p.createdAt || new Date().toISOString(),
   }));
   PRODUCTS = live;
-  const localOk = writeLocalCatalogProducts(live);
 
+  let apiOk = false;
   try {
     await resolveMembersApiUrl();
     if (readMembersApiUrl() && canAccessVaultAdmin()) {
       await membersApiFetch('/api/catalog', { method: 'PUT', body: { products: live } });
-      return true;
+      apiOk = true;
     }
   } catch (err) {
     console.warn('catalog API save failed', err);
+  }
+
+  // Prefer full local cache; if quota is hit, keep a slim mirror so the app still boots
+  let localOk = writeLocalCatalogProducts(live, { quiet: true });
+  if (!localOk) {
+    localOk = writeLocalCatalogProducts(slimCatalogForLocalStorage(live), { quiet: true });
+  }
+
+  if (apiOk) return true;
+  if (localOk) {
     if (canAccessVaultAdmin()) {
       showToast('Saved on this device — start the bot/API so catalog syncs for everyone');
     }
+    return true;
   }
-  return localOk;
+  showToast('Couldn’t save catalog — start the bot/API (tunnel) and try again');
+  return false;
 }
 
 async function loadCatalogProducts() {
@@ -5084,6 +5230,7 @@ function buildProductFromForm() {
     authorIcon: detailsOn ? draft.authorIcon : undefined,
     about: aboutOn ? draft.about : '',
     aboutInsideHtml: aboutOn ? draft.aboutInsideHtml : undefined,
+    aboutInsideItems: aboutOn ? draft.aboutInsideItems : undefined,
     aboutInsideHeading: aboutOn ? draft.aboutInsideHeading : undefined,
     aboutIntroHtml: aboutOn ? draft.aboutIntroHtml : undefined,
     aboutOn,
@@ -5092,16 +5239,45 @@ function buildProductFromForm() {
   };
 }
 
-function saveEditorProduct() {
-  const product = buildProductFromForm();
+async function saveEditorProduct() {
+  syncEditorAboutHiddenField();
+  let product = buildProductFromForm();
   if (!product) return null;
-  if (editingProductId) {
-    const idx = PRODUCTS.findIndex(p => p.id === editingProductId);
-    if (idx !== -1) PRODUCTS[idx] = product;
-  } else {
-    PRODUCTS.unshift(product);
+
+  // Compress What's Inside icons so localStorage / API payloads stay small
+  if (product.aboutInsideHtml || (product.aboutInsideItems && product.aboutInsideItems.length)) {
+    try {
+      const packed = await compressAboutInsidePayload(product.aboutInsideHtml, product.aboutInsideItems);
+      product = {
+        ...product,
+        aboutInsideHtml: packed.html || undefined,
+        aboutInsideItems: packed.items.length ? packed.items : undefined,
+      };
+      if (editorAboutInsideBody && packed.html) {
+        editorAboutInsideBody.innerHTML = packed.html;
+        enhanceEditorAboutMediaItems(editorAboutInsideBody);
+        syncEditorAboutHiddenField();
+      }
+    } catch (err) {
+      console.warn('about icon compress skipped', err);
+    }
   }
-  saveCatalogProducts();
+
+  const editingId = editingProductId;
+  const prevIdx = editingId ? PRODUCTS.findIndex(p => p.id === editingId) : -1;
+  const previous = prevIdx >= 0 ? PRODUCTS[prevIdx] : null;
+
+  if (prevIdx >= 0) PRODUCTS[prevIdx] = product;
+  else PRODUCTS.unshift(product);
+
+  const ok = await saveCatalogProducts();
+  if (!ok) {
+    if (prevIdx >= 0 && previous) PRODUCTS[prevIdx] = previous;
+    else PRODUCTS = PRODUCTS.filter(p => p.id !== product.id);
+    syncCatalogUI();
+    renderAdminPanel();
+    return null;
+  }
   syncCatalogUI();
   renderAdminPanel();
   return product;
@@ -5109,16 +5285,17 @@ function saveEditorProduct() {
 
 adminEditorBack?.addEventListener('click', closeAdminEditor);
 
-catalogEditorForm.addEventListener('submit', e => {
+catalogEditorForm.addEventListener('submit', async e => {
   e.preventDefault();
   if (!editorCoverDataUrl && !editorThumb.value) {
     showToast('Import a cover GIF/image or pick a gradient style');
     editorThumbPicker?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-  const product = saveEditorProduct();
+  const product = await saveEditorProduct();
   if (!product) {
-    showToast('Title is required');
+    // saveEditorProduct already toasted on storage failure; title missing is separate
+    if (!editorTitle.value.trim()) showToast('Title is required');
     return;
   }
   closeAdminEditor();
@@ -5565,11 +5742,15 @@ editorAboutMediaFile?.addEventListener('change', e => {
   e.target.value = '';
   if (!files.length) return;
   if (pendingAboutMediaImg) {
-    readImageFile(files[0], dataUrl => {
-      pendingAboutMediaImg.src = dataUrl;
-      pendingAboutMediaImg = null;
-      syncEditorAboutHiddenField();
-    });
+    compressAboutIconFile(files[0])
+      .then(dataUrl => {
+        pendingAboutMediaImg.src = dataUrl;
+        pendingAboutMediaImg = null;
+        syncEditorAboutHiddenField();
+      })
+      .catch(() => {
+        pendingAboutMediaImg = null;
+      });
     return;
   }
   const hadItems = parseAboutMediaItemsFromHtml(serializeEditorAboutInsideHtml()).length > 0;
