@@ -130,6 +130,9 @@ function renderProductAuthorLine(product) {
 
 function renderProductPriceContent(product) {
   if (product.price === 0) return 'Free';
+  if (hasCatalogUnlock(product)) {
+    return '<span class="price-included">Owned</span>';
+  }
   if (canDownloadProduct(product)) {
     return '<span class="price-included">Download ready</span>';
   }
@@ -2238,6 +2241,9 @@ const favorites = new Set();
 const library = new Set();
 const LIBRARY_STORAGE_KEY = 'j2026vault_library_ids';
 const OWNED_STORAGE_KEY = 'j2026vault_owned_ids';
+const FAVORITES_STORAGE_KEY = 'j2026vault_favorite_ids';
+const PURCHASES_SEEN_KEY = 'j2026vault_purchases_seen';
+const FAVORITES_SEEN_KEY = 'j2026vault_favorites_seen';
 
 function readIdSet(key) {
   try {
@@ -2266,6 +2272,40 @@ function loadOwnedLibrary() {
 function persistOwnedLibrary() {
   writeIdSet(LIBRARY_STORAGE_KEY, library);
   writeIdSet(OWNED_STORAGE_KEY, owned);
+}
+
+function loadFavorites() {
+  favorites.clear();
+  readIdSet(FAVORITES_STORAGE_KEY).forEach(id => favorites.add(id));
+}
+
+function persistFavorites() {
+  writeIdSet(FAVORITES_STORAGE_KEY, favorites);
+}
+
+function loadSeenCounts() {
+  try {
+    const pRaw = localStorage.getItem(PURCHASES_SEEN_KEY);
+    const fRaw = localStorage.getItem(FAVORITES_SEEN_KEY);
+    // First run after this fix: mark current owned/liked as already seen (no false badges)
+    purchasesSeenCount = pRaw == null
+      ? library.size
+      : Math.max(0, Number(pRaw) || 0);
+    favoritesSeenCount = fRaw == null
+      ? favorites.size
+      : Math.max(0, Number(fRaw) || 0);
+    persistSeenCounts();
+  } catch {
+    purchasesSeenCount = library.size;
+    favoritesSeenCount = favorites.size;
+  }
+}
+
+function persistSeenCounts() {
+  try {
+    localStorage.setItem(PURCHASES_SEEN_KEY, String(purchasesSeenCount));
+    localStorage.setItem(FAVORITES_SEEN_KEY, String(favoritesSeenCount));
+  } catch {}
 }
 
 let subscribed = false;
@@ -2615,6 +2655,10 @@ function renderCatalogPlanBadges(product) {
 
 function renderCatalogBadges(product) {
   let html = '';
+  // Show OWNED once the user has downloaded/bought — same badge as Purchases
+  if (hasCatalogUnlock(product)) {
+    html += `<span class="badge badge-owned">${BADGE_ICONS.check} OWNED</span>`;
+  }
   if (product.badges.includes('off')) {
     html += `<span class="badge badge-off">${BADGE_ICONS.tag} ${product.discount || 'OFF'}</span>`;
   }
@@ -2778,6 +2822,9 @@ function renderBadges(product, context = 'catalog') {
   if (context === 'catalog' || context === 'admin') return renderCatalogBadges(product);
 
   let badges = '';
+  if (hasCatalogUnlock(product)) {
+    badges += `<span class="badge badge-owned">${BADGE_ICONS.check} OWNED</span>`;
+  }
   const requiredPlan = getProductRequiredPlan(product);
   if (product.badges.includes('off')) badges += `<span class="badge badge-off">${BADGE_ICONS.tag} ${product.discount || 'OFF'}</span>`;
   if (product.badges.includes('bundle')) badges += `<span class="badge badge-bundle badge-bundle-tier"><span class="bundle-lottie" data-tgs="${BUNDLE_TGS_PATH}" aria-hidden="true"></span>BUNDLE</span>`;
@@ -3249,6 +3296,7 @@ function deleteCatalogProduct(id) {
   library.delete(id);
   owned.delete(id);
   persistOwnedLibrary();
+  persistFavorites();
   saveCatalogProducts();
 
   if (currentProduct?.id === id) {
@@ -5412,8 +5460,14 @@ function showView(name) {
     currentView = name;
     if (name !== 'admin-editor' && name !== 'profile-editor') previousView = name;
   }
-  if (name === 'purchases') purchasesSeenCount = library.size;
-  if (name === 'favourites') favoritesSeenCount = favorites.size;
+  if (name === 'purchases') {
+    purchasesSeenCount = library.size;
+    persistSeenCounts();
+  }
+  if (name === 'favourites') {
+    favoritesSeenCount = favorites.size;
+    persistSeenCounts();
+  }
   if (name === 'admin') renderAdminPanel();
   if (name === 'profile') applyVaultAdminAccess();
   if (name === 'profile-editor') renderProfileEditorList();
@@ -6750,9 +6804,11 @@ function renderCard(product, isBundle = false, context = 'catalog') {
 
   const price = product.price === 0
     ? `<span class="card-price free">Free</span>`
-    : canDownloadProduct(product)
-      ? `<span class="card-price free">Download ready</span>`
-      : `<span class="card-price">$${product.price.toFixed(2)}${product.oldPrice ? `<span class="old">$${product.oldPrice.toFixed(2)}</span>` : ''}</span>`;
+    : hasCatalogUnlock(product)
+      ? `<span class="card-price free">Owned</span>`
+      : canDownloadProduct(product)
+        ? `<span class="card-price free">Download ready</span>`
+        : `<span class="card-price">$${product.price.toFixed(2)}${product.oldPrice ? `<span class="old">$${product.oldPrice.toFixed(2)}</span>` : ''}</span>`;
 
   const footerLeft = context === 'purchases'
     ? `<span class="card-owned">Purchased</span>`
@@ -6915,12 +6971,17 @@ function toggleFavorite(id) {
   const adding = !favorites.has(id);
   if (adding) favorites.add(id);
   else favorites.delete(id);
+  persistFavorites();
   if (product) {
-    if (adding) product.favs = (product.favs || 0) + 1;
-    else product.favs = Math.max(0, (product.favs || 0) - 1);
-    saveCatalogProducts();
+    // Only bump the public count when this device's like state actually changes
+    if (adding) product.favs = Math.max(0, (Number(product.favs) || 0) + 1);
+    else product.favs = Math.max(0, (Number(product.favs) || 0) - 1);
+    saveCatalogProducts().catch(() => {});
   }
-  if (currentView === 'favourites') favoritesSeenCount = favorites.size;
+  if (currentView === 'favourites') {
+    favoritesSeenCount = favorites.size;
+    persistSeenCounts();
+  }
   renderFavourites();
   filterProducts();
   renderBundles();
@@ -7443,6 +7504,8 @@ async function initApp() {
 
   applyVaultAdminAccess();
   loadOwnedLibrary();
+  loadFavorites();
+  loadSeenCounts();
   await loadCatalogProducts();
   loadProfileName();
   initAccentThemePicker();
