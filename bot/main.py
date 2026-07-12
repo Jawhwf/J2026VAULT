@@ -2,10 +2,24 @@
 J2026VaultBot
 Official Telegram bot for J2026Vault.
 
-Run:
-    cd /Users/j2025/Desktop/J2026VaultBot
-    source .venv/bin/activate
-    python bot/main.py
+Layout:
+    bot/
+      main.py              # this file
+      config.py            # secrets (gitignored) — copy from config.example.py
+      config.example.py
+      requirements.txt
+      assets/              # welcome / membership / help / menu banners
+      run-bot.sh           # macOS / Linux
+      run-bot.bat          # Windows
+      logs/                # runtime logs (optional)
+
+Run (from project root):
+    ./run-bot.sh          # macOS / Linux
+    run-bot.bat           # Windows
+
+Or from this folder:
+    ./run-bot.sh
+    run-bot.bat
 """
 
 import sys
@@ -337,4 +351,16 @@ if __name__ == "__main__":
     except Exception as err:
         print(f"Startup sync skipped: {err}", flush=True)
 
-    bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=True)
+    # skip_pending=False avoids an extra getUpdates clash right after another instance stops
+    while True:
+        try:
+            bot.infinity_polling(timeout=20, long_polling_timeout=10, skip_pending=False)
+            break
+        except Exception as err:
+            msg = str(err)
+            if "409" in msg or "Conflict" in msg:
+                print("Another getUpdates session is still closing — retrying in 3s...", flush=True)
+                import time
+                time.sleep(3)
+                continue
+            raise
