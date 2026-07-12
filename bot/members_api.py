@@ -19,7 +19,7 @@ from members_store import (
 )
 
 OWNER_IDS = {6690519994, 1866326493}
-OWNER_USERNAMES = {"j2026vault", "kiselomlqko"}
+OWNER_USERNAMES = {"j2026vault", "kiselomlqko", "yogurt"}
 
 
 def _parse_init_data(init_data: str) -> dict:
@@ -221,7 +221,7 @@ def build_handler(bot_token: str):
                 member = normalize_member(body)
                 if not member:
                     return self._json(400, {"ok": False, "error": "Invalid member"})
-                upsert_member(member)
+                upsert_member(body, source="editor")
                 return self._json(200, {"ok": True, "member": get_member(member_id), "members": list_members()})
 
             return self._json(404, {"ok": False, "error": "Not found"})

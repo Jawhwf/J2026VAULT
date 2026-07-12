@@ -174,14 +174,24 @@ def upsert_member(patch: dict, *, create_registered: bool = True, touch: bool = 
         prev = normalize_member(members[idx]) or {}
         if not str(patch.get("registeredAt") or "").strip():
             normalized["registeredAt"] = prev.get("registeredAt") or normalized["registeredAt"]
-        if not normalized.get("avatarDataUrl") and prev.get("avatarDataUrl"):
-            normalized["avatarDataUrl"] = prev["avatarDataUrl"]
-        if not normalized.get("photoUrl") and prev.get("photoUrl"):
-            normalized["photoUrl"] = prev["photoUrl"]
+        if "avatarDataUrl" not in patch:
+            if not normalized.get("avatarDataUrl") and prev.get("avatarDataUrl"):
+                normalized["avatarDataUrl"] = prev["avatarDataUrl"]
+        elif not patch.get("avatarDataUrl"):
+            normalized["avatarDataUrl"] = None
+
+        if "photoUrl" not in patch:
+            if not normalized.get("photoUrl") and prev.get("photoUrl"):
+                normalized["photoUrl"] = prev["photoUrl"]
+        elif not str(patch.get("photoUrl") or "").strip():
+            normalized["photoUrl"] = ""
+
         if not str(patch.get("name") or "").strip() and prev.get("name"):
             normalized["name"] = prev["name"]
         if not str(patch.get("username") or "").strip() and prev.get("username"):
-            normalized["username"] = prev["username"]
+            # Allow explicit empty username only when key present as ""
+            if "username" not in patch:
+                normalized["username"] = prev["username"]
         if "downloads" not in patch:
             normalized["downloads"] = prev.get("downloads", 0)
         if "purchases" not in patch:
@@ -266,7 +276,7 @@ def replace_all_members(members: list) -> dict:
     return save_store({"members": cleaned})
 
 
-def touch_from_telegram_user(user, *, source: str = "bot") -> dict:
+def touch_from_telegram_user(user, *, source: str = "bot", **extra) -> dict:
     """Record / refresh a member when they hit the bot or Mini App."""
     if user is None:
         raise ValueError("Missing user")
@@ -278,13 +288,13 @@ def touch_from_telegram_user(user, *, source: str = "bot") -> dict:
     last = getattr(user, "last_name", None) or ""
     name = f"{first} {last}".strip() or (f"@{username}" if username else f"User {user_id}")
     photo = getattr(user, "photo_url", None) or ""
-    return upsert_member(
-        {
-            "id": user_id,
-            "username": username,
-            "name": name,
-            "photoUrl": photo,
-        },
-        touch=True,
-        source=source,
-    )
+    patch = {
+        "id": user_id,
+        "username": username,
+        "name": name,
+        "photoUrl": photo,
+    }
+    for key in ("avatarDataUrl", "photoUrl", "name", "username"):
+        if key in extra and extra[key]:
+            patch[key] = extra[key]
+    return upsert_member(patch, touch=True, source=source)
