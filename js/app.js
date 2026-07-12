@@ -836,6 +836,9 @@ function renderVaultBadge() {
 function isExampleProduct(product) {
   if (!product) return true;
   if (product.custom === true) return false;
+  if (product.aboutInsideHtml || (Array.isArray(product.aboutInsideItems) && product.aboutInsideItems.length)) {
+    return false;
+  }
   const title = String(product.title || '');
   if (/^Example\b/i.test(title)) return true;
   if (Array.isArray(product.tags) && product.tags.some(t => String(t).toLowerCase() === 'example')) return true;
@@ -3037,7 +3040,7 @@ function showCatalogSaveCelebration(product) {
   document.getElementById('celebrateTitle').textContent = 'Item saved!';
   document.getElementById('celebrateSub').innerHTML = `<strong>${product.title}</strong> is now in your catalog`;
   const hint = document.getElementById('celebrateHint');
-  hint.textContent = 'Visible on this device instantly';
+  hint.textContent = 'Saved to vault storage — reopen anytime';
   hint.hidden = false;
 
   document.getElementById('celebratePrimary').textContent = 'View in catalog';
@@ -5012,13 +5015,74 @@ function catalogProducts() {
 }
 
 function getNextProductId() {
-  return PRODUCTS.reduce((max, p) => Math.max(max, Number(p.id) || 0), 0) + 1;
+  // Avoid legacy demo IDs 1–7 (those can be mistaken for placeholders)
+  const maxId = PRODUCTS.reduce((max, p) => Math.max(max, Number(p.id) || 0), 0);
+  return Math.max(100, maxId + 1);
 }
 
 function normalizeCatalogList(raw) {
   if (Array.isArray(raw)) return raw.filter(p => p && !isExampleProduct(p));
   if (raw && Array.isArray(raw.products)) return raw.products.filter(p => p && !isExampleProduct(p));
   return [];
+}
+
+const CATALOG_IDB_NAME = 'j2026vault_catalog_db';
+const CATALOG_IDB_STORE = 'catalog';
+
+function openCatalogIdb() {
+  return new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined') {
+      reject(new Error('indexedDB unavailable'));
+      return;
+    }
+    const req = indexedDB.open(CATALOG_IDB_NAME, 1);
+    req.onupgradeneeded = () => {
+      const db = req.result;
+      if (!db.objectStoreNames.contains(CATALOG_IDB_STORE)) {
+        db.createObjectStore(CATALOG_IDB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error || new Error('indexedDB open failed'));
+  });
+}
+
+async function writeIdbCatalogProducts(list) {
+  const live = normalizeCatalogList(list);
+  const db = await openCatalogIdb();
+  try {
+    await new Promise((resolve, reject) => {
+      const tx = db.transaction(CATALOG_IDB_STORE, 'readwrite');
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error || new Error('indexedDB write failed'));
+      tx.objectStore(CATALOG_IDB_STORE).put({
+        updatedAt: new Date().toISOString(),
+        products: live,
+      }, 'products');
+    });
+    return true;
+  } finally {
+    try { db.close(); } catch {}
+  }
+}
+
+async function readIdbCatalogProducts() {
+  try {
+    const db = await openCatalogIdb();
+    try {
+      const row = await new Promise((resolve, reject) => {
+        const tx = db.transaction(CATALOG_IDB_STORE, 'readonly');
+        const req = tx.objectStore(CATALOG_IDB_STORE).get('products');
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error || new Error('indexedDB read failed'));
+      });
+      return normalizeCatalogList(row?.products || row || []);
+    } finally {
+      try { db.close(); } catch {}
+    }
+  } catch {
+    return [];
+  }
 }
 
 function readLocalCatalogProducts() {
@@ -5048,7 +5112,7 @@ function writeLocalCatalogProducts(list, { quiet = false } = {}) {
 function slimCatalogForLocalStorage(list) {
   return normalizeCatalogList(list).map(p => {
     const next = { ...p };
-    // Keep structured names; drop huge inline images from the local cache only
+    // Keep structured names; drop huge inline images from the localStorage mirror only
     if (Array.isArray(next.aboutInsideItems)) {
       next.aboutInsideItems = next.aboutInsideItems.map(item => ({
         src: (item?.src && !String(item.src).startsWith('data:')) ? item.src : '',
@@ -5059,13 +5123,35 @@ function slimCatalogForLocalStorage(list) {
       next.aboutInsideHtml = next.aboutInsideHtml.replace(/src="data:image[^"]*"/gi, 'src=""');
     }
     if (typeof next.coverImage === 'string' && next.coverImage.startsWith('data:') && next.coverImage.length > 180_000) {
-      delete next.coverImage;
+      // Keep a tiny marker so id 1–7 custom posts aren’t treated as demo placeholders
+      next.coverImage = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==';
+      next._coverOmitted = true;
     }
     if (typeof next.authorIcon === 'string' && next.authorIcon.startsWith('data:') && next.authorIcon.length > 80_000) {
       delete next.authorIcon;
     }
     return next;
   });
+}
+
+async function persistCatalogEverywhere(list, { quiet = false } = {}) {
+  const live = normalizeCatalogList(list);
+  let idbOk = false;
+  try {
+    idbOk = await writeIdbCatalogProducts(live);
+  } catch (err) {
+    console.warn('catalog idb save failed', err);
+  }
+
+  let localOk = writeLocalCatalogProducts(live, { quiet: true });
+  if (!localOk) {
+    localOk = writeLocalCatalogProducts(slimCatalogForLocalStorage(live), { quiet: true });
+  }
+
+  if (!idbOk && !localOk && !quiet) {
+    showToast('Couldn’t cache catalog on this device — API save is required');
+  }
+  return idbOk || localOk;
 }
 
 async function fetchCatalogJsonFile() {
@@ -5084,16 +5170,51 @@ async function fetchCatalogFromApi() {
   return normalizeCatalogList(data);
 }
 
+function catalogFreshness(list) {
+  return (list || []).reduce((m, p) => Math.max(
+    m,
+    Date.parse(p.updatedAt || p.createdAt || '') || 0,
+    Number(p.id) || 0
+  ), 0);
+}
+
+function mergeCatalogLists(...lists) {
+  const map = new Map();
+  lists.flat().forEach(raw => {
+    const p = raw && typeof raw === 'object' ? raw : null;
+    if (!p || isExampleProduct(p)) return;
+    const id = Number(p.id);
+    if (!Number.isFinite(id)) return;
+    const prev = map.get(id);
+    if (!prev) {
+      map.set(id, p);
+      return;
+    }
+    const prevT = Date.parse(prev.updatedAt || prev.createdAt || '') || 0;
+    const nextT = Date.parse(p.updatedAt || p.createdAt || '') || 0;
+    // Newer wins; if tie, prefer the record with more content (cover / insides)
+    if (nextT > prevT) map.set(id, { ...prev, ...p });
+    else if (prevT > nextT) map.set(id, { ...p, ...prev });
+    else {
+      const prevScore = (prev.coverImage ? 2 : 0) + (prev.aboutInsideHtml || prev.aboutInsideItems ? 1 : 0);
+      const nextScore = (p.coverImage ? 2 : 0) + (p.aboutInsideHtml || p.aboutInsideItems ? 1 : 0);
+      map.set(id, nextScore >= prevScore ? { ...prev, ...p } : { ...p, ...prev });
+    }
+  });
+  return [...map.values()].sort((a, b) => {
+    const bt = Date.parse(b.updatedAt || b.createdAt || '') || 0;
+    const at = Date.parse(a.updatedAt || a.createdAt || '') || 0;
+    return bt - at || Number(b.id) - Number(a.id);
+  });
+}
+
 function pickPreferredCatalog(localList, remoteList) {
   const local = normalizeCatalogList(localList);
   const remote = normalizeCatalogList(remoteList);
+  // Never let an empty side wipe a populated catalog
   if (!remote.length) return local;
   if (!local.length) return remote;
-  // Prefer the longer / newer remote catalog so every Mini App user sees owner posts
-  const localMax = local.reduce((m, p) => Math.max(m, Date.parse(p.updatedAt || p.createdAt || '') || 0, Number(p.id) || 0), 0);
-  const remoteMax = remote.reduce((m, p) => Math.max(m, Date.parse(p.updatedAt || p.createdAt || '') || 0, Number(p.id) || 0), 0);
-  if (remote.length >= local.length || remoteMax >= localMax) return remote;
-  return local;
+  return mergeCatalogLists(local, remote);
 }
 
 async function saveCatalogProducts() {
@@ -5114,20 +5235,16 @@ async function saveCatalogProducts() {
     console.warn('catalog API save failed', err);
   }
 
-  // Prefer full local cache; if quota is hit, keep a slim mirror so the app still boots
-  let localOk = writeLocalCatalogProducts(live, { quiet: true });
-  if (!localOk) {
-    localOk = writeLocalCatalogProducts(slimCatalogForLocalStorage(live), { quiet: true });
-  }
+  const cacheOk = await persistCatalogEverywhere(live, { quiet: true });
 
   if (apiOk) return true;
-  if (localOk) {
+  if (cacheOk) {
     if (canAccessVaultAdmin()) {
       showToast('Saved on this device — start the bot/API so catalog syncs for everyone');
     }
     return true;
   }
-  showToast('Couldn’t save catalog — start the bot/API (tunnel) and try again');
+  showToast('Couldn’t save catalog — restart the bot/API and try again');
   return false;
 }
 
@@ -5139,12 +5256,20 @@ async function loadCatalogProducts() {
   try {
     await resolveMembersApiUrl();
     const apiList = await fetchCatalogFromApi();
-    if (apiList?.length) remote = apiList;
+    // Use API list when it responds successfully — even if empty only when local is also empty
+    if (Array.isArray(apiList)) {
+      if (apiList.length || !remote.length) remote = apiList;
+    }
   } catch {}
 
-  const local = readLocalCatalogProducts();
-  PRODUCTS = pickPreferredCatalog(local, remote);
-  writeLocalCatalogProducts(PRODUCTS);
+  const localLs = readLocalCatalogProducts();
+  const localIdb = await readIdbCatalogProducts();
+  const local = mergeCatalogLists(localLs, localIdb);
+  const merged = pickPreferredCatalog(local, remote);
+
+  // Hard guard: never replace a non-empty local catalog with empty remote
+  PRODUCTS = (!merged.length && local.length) ? local : merged;
+  await persistCatalogEverywhere(PRODUCTS, { quiet: true });
 }
 
 function syncCatalogUI() {
