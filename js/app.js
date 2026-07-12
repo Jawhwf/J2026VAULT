@@ -1143,12 +1143,15 @@ function normalizeMemberRecord(raw, fallbackUser = null) {
   let id = Number(src.id);
   if (!Number.isFinite(id) || id <= 0) id = base.id;
   const plan = String(src.plan || 'MORTAL').toUpperCase();
+  const avatarDataUrl = src.avatarDataUrl && !isWeakAvatarDataUrl(src.avatarDataUrl)
+    ? String(src.avatarDataUrl)
+    : null;
   return {
     id: id ?? null,
     username: String(src.username || base.username || '').replace(/^@/, '').trim(),
     name: String(src.name || base.name || 'Vault User').slice(0, 48),
     photoUrl: String(src.photoUrl || base.photoUrl || '').trim(),
-    avatarDataUrl: src.avatarDataUrl ? String(src.avatarDataUrl) : null,
+    avatarDataUrl,
     registeredAt: parseRegisteredLabel(src.registeredAt) || base.registeredAt,
     downloads: Math.max(0, Number(src.downloads) || 0),
     purchases: Math.max(0, Number(src.purchases) || 0),
@@ -1225,6 +1228,18 @@ function removeMemberFromCache(id) {
 function isVaultOwnerMemberId(memberId) {
   const id = Number(memberId);
   return Number.isFinite(id) && VAULT_OWNER_IDS.has(id);
+}
+
+function isWeakAvatarDataUrl(dataUrl) {
+  const s = String(dataUrl || '');
+  return !s.startsWith('data:image') || s.length < 2000;
+}
+
+function memberAvatarSrc(member) {
+  if (!member) return 'assets/pfp.png';
+  if (member.avatarDataUrl && !isWeakAvatarDataUrl(member.avatarDataUrl)) return member.avatarDataUrl;
+  if (member.photoUrl) return member.photoUrl;
+  return 'assets/pfp.png';
 }
 
 function planLabel(planKey) {
@@ -1398,6 +1413,20 @@ function ensureOwnerMembersInCache() {
   return membersCache;
 }
 
+async function refreshMemberAvatars(members) {
+  if (!readMembersApiUrl() || !getTelegramInitData()) return members;
+  const list = members || membersCache;
+  for (const member of list) {
+    if (!member?.id) continue;
+    if (memberAvatarSrc(member) !== 'assets/pfp.png') continue;
+    try {
+      const data = await membersApiFetch(`/api/members/${member.id}/refresh-avatar`, { method: 'POST' });
+      if (data.member) upsertMemberInCache(data.member);
+    } catch {}
+  }
+  return membersCache;
+}
+
 async function refreshMembersList() {
   membersCache = readMembersCache();
   ensureOwnerMembersInCache();
@@ -1409,6 +1438,7 @@ async function refreshMembersList() {
         writeMembersCache(mergeMembersLists(membersCache, data.members));
       }
       ensureOwnerMembersInCache();
+      await refreshMemberAvatars(membersCache);
       updateProfileEditorStats(data.stats || computeLocalMemberStats(membersCache));
     } else {
       try {
@@ -1504,6 +1534,10 @@ async function ensureOwnProfileLoaded() {
     registeredAt: shared?.registeredAt || local.registeredAt,
     id: myId ?? local.id,
     username: getTelegramUsername(telegramUser) || shared?.username || local.username,
+    photoUrl: telegramUser?.photo_url || shared?.photoUrl || local.photoUrl || '',
+    avatarDataUrl: (shared?.avatarDataUrl && !isWeakAvatarDataUrl(shared.avatarDataUrl))
+      ? shared.avatarDataUrl
+      : ((local.avatarDataUrl && !isWeakAvatarDataUrl(local.avatarDataUrl)) ? local.avatarDataUrl : null),
   }, telegramUser);
 
   writeOwnProfileLocal(merged);
@@ -1515,12 +1549,21 @@ async function ensureOwnProfileLoaded() {
 async function heartbeatOwnProfile() {
   const profile = persistOwnProfileFromUi();
   const source = detectVisitSource();
+  const photoUrl = String(telegramUser?.photo_url || profile.photoUrl || '').trim();
+  const payload = {
+    ...profile,
+    source,
+    photoUrl,
+    avatarDataUrl: (profile.avatarDataUrl && !isWeakAvatarDataUrl(profile.avatarDataUrl))
+      ? profile.avatarDataUrl
+      : null,
+  };
   try {
     await resolveMembersApiUrl();
     if (readMembersApiUrl() && getTelegramInitData()) {
       const data = await membersApiFetch('/api/me/sync', {
         method: 'POST',
-        body: { ...profile, source },
+        body: payload,
       });
       if (data.member) {
         const remote = normalizeMemberRecord(data.member, telegramUser);
@@ -1530,9 +1573,8 @@ async function heartbeatOwnProfile() {
       }
       if (data.stats) updateProfileEditorStats(data.stats);
     } else {
-      // Still track locally so Profile editor sees this device's users
       upsertMemberInCache({
-        ...profile,
+        ...payload,
         sources: Array.from(new Set([...(profile.sources || []), source])),
         firstSource: profile.firstSource || source,
         seenCount: Math.max(1, Number(profile.seenCount || 0) + 1),
@@ -1541,7 +1583,7 @@ async function heartbeatOwnProfile() {
     }
   } catch {
     upsertMemberInCache({
-      ...profile,
+      ...payload,
       sources: Array.from(new Set([...(profile.sources || []), source])),
       firstSource: profile.firstSource || source,
       seenCount: Math.max(1, Number(profile.seenCount || 0) + 1),
@@ -1654,7 +1696,7 @@ function renderProfileEditorList() {
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'profile-editor-member';
-    const avatar = member.avatarDataUrl || member.photoUrl || 'assets/pfp.png';
+    const avatar = memberAvatarSrc(member);
     const handle = member.username ? `@${member.username}` : `ID ${member.id}`;
     const via = member.firstSource || (member.sources && member.sources[0]) || '';
     const crown = member.plan === 'ETERNAL'
@@ -1740,9 +1782,11 @@ function openProfileEditorSheet(memberId = null) {
   const purchasesInput = document.getElementById('pePurchases');
   if (purchasesInput) purchasesInput.value = String(member?.purchases ?? 0);
 
-  peDraftAvatarDataUrl = member?.avatarDataUrl || null;
-  const preview = peDraftAvatarDataUrl || member?.photoUrl || 'assets/pfp.png';
-  setProfileEditorAvatarPreview(preview, { showClear: !!(peDraftAvatarDataUrl || member?.photoUrl) });
+  peDraftAvatarDataUrl = (member?.avatarDataUrl && !isWeakAvatarDataUrl(member.avatarDataUrl))
+    ? member.avatarDataUrl
+    : null;
+  const preview = memberAvatarSrc(member);
+  setProfileEditorAvatarPreview(preview, { showClear: preview !== 'assets/pfp.png' });
   const fileInput = document.getElementById('peAvatarFile');
   if (fileInput) fileInput.value = '';
 
