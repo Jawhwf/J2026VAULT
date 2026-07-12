@@ -1712,10 +1712,12 @@ function renderProfileEditorList() {
       <span class="profile-editor-member-main">
         <span class="profile-editor-member-top">
           <span class="profile-editor-member-name"></span>
-          ${isOwnerMember ? '<span class="pe-owner-badge">OWNER</span>' : ''}
-          <span class="profile-editor-member-plan">
-            <img class="pe-list-crown" src="${crown}" alt="">
-            <span class="pe-list-plan-label"></span>
+          <span class="profile-editor-member-badges">
+            ${isOwnerMember ? '<span class="pe-owner-badge">OWNER</span>' : ''}
+            <span class="profile-editor-member-plan">
+              <img class="pe-list-crown" src="${crown}" alt="">
+              <span class="pe-list-plan-label"></span>
+            </span>
           </span>
         </span>
         <span class="profile-editor-member-meta"></span>
