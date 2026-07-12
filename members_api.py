@@ -18,6 +18,7 @@ from members_store import (
     upsert_member,
 )
 from catalog_store import list_products, replace_all_products
+from accent_store import load_accent, set_accent, VALID_THEMES
 from avatars import fetch_profile_photo_data_url
 
 OWNER_IDS = {6690519994, 1866326493}
@@ -124,6 +125,11 @@ def build_handler(bot_token: str):
                 products = list_products()
                 return self._json(200, {"ok": True, "count": len(products), "products": products})
 
+            # Public accent theme (shared across Telegram / browser / local via mirror file)
+            if path in ("/api/accent", "/accent", "/api/theme", "/theme"):
+                data = load_accent()
+                return self._json(200, {"ok": True, **data})
+
             user = self._auth_user()
             if not user:
                 return self._json(401, {"ok": False, "error": "Unauthorized"})
@@ -159,6 +165,14 @@ def build_handler(bot_token: str):
             if not user:
                 return self._json(401, {"ok": False, "error": "Unauthorized"})
             body = self._read_json()
+
+            # Any authenticated Mini App user can save the shared accent theme
+            if path in ("/api/accent", "/accent", "/api/theme", "/theme"):
+                theme = str(body.get("theme") or body.get("id") or "").strip().lower()
+                if theme not in VALID_THEMES:
+                    return self._json(400, {"ok": False, "error": "Invalid theme", "allowed": sorted(VALID_THEMES)})
+                data = set_accent(theme)
+                return self._json(200, {"ok": True, **data})
 
             if path in ("/api/me/sync", "/me/sync", "/api/heartbeat", "/heartbeat"):
                 source = str(body.get("source") or "webapp").strip().lower()
