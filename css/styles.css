@@ -464,6 +464,31 @@ html, body {
   font-size: clamp(15px, 3.8vw, 18px);
   line-height: 1.2;
   margin-bottom: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+#view-catalog .card-author,
+#view-purchases .card-author,
+#view-favourites .card-author,
+#view-bundles .card-author,
+#view-admin .card-author {
+  font-size: 12px;
+  margin-top: 2px;
+  margin-bottom: 9px;
+  max-width: 100%;
+  white-space: nowrap;
+  min-width: 0;
+}
+#view-catalog .card-author > span,
+#view-purchases .card-author > span,
+#view-favourites .card-author > span,
+#view-bundles .card-author > span,
+#view-admin .card-author > span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 #view-catalog .card-footer,
 #view-purchases .card-footer,
@@ -902,6 +927,9 @@ html, body {
   font-size: 12px;
   margin-top: 2px;
   margin-bottom: 9px;
+  max-width: 100%;
+  white-space: nowrap;
+  min-width: 0;
 }
 #view-catalog .card-author-icon,
 #view-purchases .card-author-icon,
@@ -1318,34 +1346,46 @@ html, body {
   margin-bottom: 14px;
 }
 .product-title-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  column-gap: 12px;
-  row-gap: 4px;
-  align-items: center;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+  min-width: 0;
 }
 .product-title-row .product-title {
-  grid-column: 1;
-  grid-row: 1;
-  align-self: start;
-}
-.product-title-row .product-price-aside {
-  grid-column: 2;
-  grid-row: 2;
-  justify-self: end;
-  align-self: center;
-}
-.product-title-row .product-author {
-  grid-column: 1;
-  grid-row: 2;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .product-title-row .product-badges {
-  grid-column: 2;
-  grid-row: 1;
-  justify-self: end;
-  align-self: start;
-  flex-wrap: nowrap;
+  justify-content: flex-start;
+  justify-self: start;
+  max-width: 100%;
+  flex-wrap: wrap;
+}
+.product-meta-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  width: 100%;
+}
+.product-title-row .product-author {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.product-title-row .product-price-aside {
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 .product-price-aside {
   flex-shrink: 0;
@@ -1424,9 +1464,15 @@ html, body {
   margin: 0;
   line-height: 1.15;
   letter-spacing: -0.02em;
+  white-space: nowrap !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  word-break: keep-all;
+  overflow-wrap: normal;
 }
 .product-author {
   display: inline-flex;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 8px;
   margin: 3px 0 0;
@@ -1435,6 +1481,21 @@ html, body {
   font-size: 13px;
   color: var(--text-muted);
   font-weight: 500;
+  white-space: nowrap !important;
+  max-width: 100%;
+  min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: normal;
+}
+.product-author > span,
+.product-author .author-anim-text {
+  display: inline;
+  white-space: nowrap !important;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  word-break: keep-all;
+  overflow-wrap: normal;
 }
 .meta-pill {
   display: inline-flex;
@@ -1481,8 +1542,8 @@ html, body {
   gap: 5px;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  max-width: min(100%, 240px);
+  justify-content: flex-start;
+  max-width: 100%;
 }
 .product-badges .badge {
   font-size: 10px;
