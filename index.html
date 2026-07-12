@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/styles.css?v=20260712w">
+  <link rel="stylesheet" href="css/styles.css?v=20260712y">
   <link rel="icon" href="assets/pfp.png" type="image/png">
   <link rel="preload" href="assets/j26-logo.svg" as="image" type="image/svg+xml">
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -586,10 +586,10 @@
                           <span id="editorDetailAuthorIconSlot" class="editor-post-author-icon-slot"></span>
                           <svg class="editor-post-author-upload-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
                         </label>
-                        <input id="editorWebsite" class="editor-detail-website-input" value="" placeholder="yoursite.com" inputmode="url" aria-label="Website" size="12">
+                        <input id="editorWebsite" class="editor-detail-website-input" value="" placeholder="yoursite.com" inputmode="url" aria-label="Website" size="14">
                         <svg class="editor-detail-website-arrow" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 17L17 7M7 7h10v10"/></svg>
+                        <button type="button" class="editor-detail-author-clear" id="editorAuthorIconClear" hidden aria-label="Remove author icon">×</button>
                       </span>
-                      <button type="button" class="editor-detail-author-clear" id="editorAuthorIconClear" hidden aria-label="Remove author icon">×</button>
                       <input type="file" id="editorAuthorIconFile" accept="image/*,.gif" hidden>
                     </span>
                   </div>
@@ -613,12 +613,11 @@
                     <p class="editor-detail-delivery-links-label">Delivery links</p>
                     <div class="editor-delivery-links-fields" id="editorDeliveryLinksFields"></div>
                   </div>
-                  <div class="detail-row">
+                  <div class="detail-row editor-detail-version-row">
                     <span>Version</span>
                     <span class="editor-detail-value editor-detail-version-value">
                       <span class="editor-detail-version-inner">
-                        <span class="editor-detail-version-prefix" aria-hidden="true">V</span>
-                        <input type="text" id="editorDetailVersion" class="editor-detail-version-input" value="1.0" aria-label="Version" placeholder="1.0">
+                        <span class="editor-detail-version-prefix" aria-hidden="true">V</span><input type="text" id="editorDetailVersion" class="editor-detail-version-input" value="1.0" aria-label="Version" placeholder="1.0" size="4" autocomplete="off">
                       </span>
                     </span>
                   </div>
@@ -1139,7 +1138,7 @@
 
   <script src="https://cdnjs.cloudflare.com/ajax/libs/lottie-web/5.12.2/lottie.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="js/bundle-tgs-data.js?v=20260712k"></script>
-  <script src="js/vault-config.js?v=20260712w"></script>
-  <script src="js/app.js?v=20260712w"></script>
+  <script src="js/vault-config.js?v=20260712y"></script>
+  <script src="js/app.js?v=20260712y"></script>
 </body>
 </html>

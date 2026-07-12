@@ -3501,6 +3501,19 @@ function syncEditorVersionFields(source = editorVersion) {
   const value = normalizeVersionInput(source?.value ?? editorDetailVersion?.value ?? '');
   if (editorVersion && editorVersion.value !== value) editorVersion.value = value;
   if (editorDetailVersion && editorDetailVersion.value !== value) editorDetailVersion.value = value;
+  syncEditorCompactInputWidths();
+}
+
+function syncEditorCompactInputWidths() {
+  const fit = (el, { min = 2, max = 10, pad = 0 } = {}) => {
+    if (!el) return;
+    const raw = String(el.value ?? '');
+    const len = Math.max(min, Math.min(max, raw.length + pad));
+    el.style.width = `${len}ch`;
+  };
+  fit(editorPrice, { min: 3, max: 6, pad: 0 });
+  fit(editorVersion, { min: 2, max: 8, pad: 0 });
+  fit(editorDetailVersion, { min: 2, max: 8, pad: 0 });
 }
 
 function closeEditorDetailOsPop() {
@@ -4579,6 +4592,7 @@ function updateEditorPreview() {
     if (showOld) editorOldPricePreview.textContent = `$${draft.oldPrice.toFixed(2)}`;
     else editorOldPricePreview.textContent = '';
   }
+  syncEditorCompactInputWidths();
   if (editorPostAuthorRow) {
     editorPostAuthorRow.hidden = draft.detailsOn === false;
   }

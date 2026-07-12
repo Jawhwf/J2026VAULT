@@ -2910,15 +2910,25 @@ body.plans-view .view.active > * {
 #view-admin-editor .editor-flat .editor-post-price-input {
   font-size: 16px;
   font-weight: 800;
+  width: 4.2ch;
+  min-width: 3ch;
+  max-width: 6ch;
 }
 #view-admin-editor .editor-flat .editor-post-version-field {
-  width: fit-content;
-  padding: 4px 8px;
+  width: max-content;
+  max-width: max-content;
+  padding: 4px 7px;
 }
 #view-admin-editor .editor-flat .editor-post-version-input {
-  min-width: 1.5ch;
-  max-width: 10ch;
+  width: 2.75ch;
+  min-width: 2ch;
+  max-width: 8ch;
   text-align: left;
+}
+#view-admin-editor .editor-flat .editor-post-old-price,
+#view-admin-editor .editor-flat .editor-post-old-price .old,
+#view-admin-editor .editor-flat .editor-old-price .old {
+  margin-left: 0;
 }
 #view-admin-editor .editor-flat .editor-post-version-input:hover,
 #view-admin-editor .editor-flat .editor-post-version-input:focus {
@@ -4074,10 +4084,13 @@ body.plans-view .view.active > * {
   display: inline-flex;
   align-items: center;
   gap: 0;
+  flex: 0 0 auto;
   flex-shrink: 0;
-  width: fit-content;
-  max-width: 100%;
-  padding: 4px 8px;
+  width: max-content;
+  max-width: max-content;
+  min-width: 0;
+  padding: 4px 7px;
+  box-sizing: border-box;
 }
 .editor-post-title-input {
   display: block;
@@ -4128,12 +4141,16 @@ body.plans-view .view.active > * {
   color: var(--text-dim);
   text-decoration: line-through;
   font-weight: 500;
-  margin-left: 4px;
+  margin-left: 0;
 }
 .editor-post-version-field:focus-within {
   border-color: var(--accent-line);
   color: var(--text);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+}
+.editor-post-version-field .editor-version-prefix {
+  flex: 0 0 auto;
+  line-height: 1;
 }
 .editor-post-version-field .editor-post-version-input {
   margin: 0;
@@ -4143,9 +4160,10 @@ body.plans-view .view.active > * {
   color: inherit;
   font: inherit;
   field-sizing: content;
-  width: auto;
-  min-width: 1.5ch;
-  max-width: 10ch;
+  flex: 0 0 auto;
+  width: 2.75ch;
+  min-width: 2ch;
+  max-width: 8ch;
   text-align: left;
 }
 .editor-post-version-field .editor-post-version-input:hover,
@@ -4157,17 +4175,21 @@ body.plans-view .view.active > * {
   display: inline-flex;
   align-items: baseline;
   flex-wrap: nowrap;
-  gap: 0;
+  gap: 3px;
   min-width: 0;
+  width: max-content;
+  max-width: 100%;
 }
 .editor-post-price-inner {
   display: inline-flex;
   align-items: baseline;
-  gap: 1px;
-  padding: 2px 5px;
-  margin: -2px -5px;
+  gap: 0;
+  padding: 2px 2px;
+  margin: -2px -2px;
   border-radius: 4px;
   transition: background 0.2s;
+  flex: 0 0 auto;
+  width: max-content;
 }
 .editor-post-price-inner:focus-within {
   background: rgba(255, 255, 255, 0.06);
@@ -4180,7 +4202,8 @@ body.plans-view .view.active > * {
 }
 .editor-post-price-input {
   field-sizing: content;
-  width: auto;
+  flex: 0 0 auto;
+  width: 4.2ch;
   min-width: 3ch;
   max-width: 6ch;
   margin: 0;
@@ -4208,7 +4231,8 @@ body.plans-view .view.active > * {
 .editor-post-old-price {
   display: inline-flex;
   align-items: baseline;
-  margin-left: 4px;
+  margin-left: 0;
+  flex: 0 0 auto;
 }
 .editor-post-old-price[hidden] {
   display: none !important;
@@ -4928,12 +4952,14 @@ body.plans-view .view.active > * {
   transform: scale(0.96);
 }
 .editor-cover-badge-pct {
-  display: inline-block;
-  min-width: 1.2ch;
+  display: inline;
+  min-width: 0;
   outline: none;
   border-radius: 3px;
-  padding: 0 1px;
+  padding: 0;
+  margin: 0;
   cursor: text;
+  white-space: nowrap;
 }
 .editor-cover-badge-pct:hover,
 .editor-cover-badge-pct:focus {
@@ -4941,9 +4967,14 @@ body.plans-view .view.active > * {
   z-index: 2;
   background: rgba(255, 255, 255, 0.14);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.22);
+  padding: 0 1px;
 }
 .editor-cover-badge-suffix {
   pointer-events: none;
+  margin-left: 1px;
+}
+.badge-off.editor-cover-badge {
+  gap: 3px;
 }
 .editor-cover-badge--removable::after {
   content: '×';
@@ -5245,6 +5276,8 @@ body.plans-view .view.active > * {
   align-items: flex-end;
   gap: 0;
   max-width: calc(100% - 8px);
+  position: relative;
+  z-index: 4;
 }
 .editor-cover-icons-row {
   display: flex;
@@ -5307,15 +5340,22 @@ body.plans-view .view.active > * {
   border-radius: 0 0 10px 10px;
 }
 .editor-cover-icons-pop {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  padding: 6px 6px 4px;
+  display: grid;
+  grid-template-columns: repeat(4, 22px);
+  gap: 5px;
+  justify-content: end;
+  align-content: start;
+  padding: 7px;
+  max-height: 112px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   border-radius: 10px 10px 0 0;
-  background: rgba(8, 8, 11, 0.82);
+  background: rgba(8, 8, 11, 0.88);
   backdrop-filter: blur(8px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
   animation: editor-cover-pop-up 0.22s var(--ease) both;
 }
 .editor-cover-icons-pop[hidden] {
@@ -5480,10 +5520,10 @@ body.plans-view .view.active > * {
   font-size: 15px;
   color: var(--text-dim);
   text-decoration: line-through;
-  margin-left: 8px;
+  margin-left: 0;
 }
 .editor-post-price-inner .editor-price-input {
-  width: auto;
+  width: 4.2ch;
   min-width: 3ch;
   max-width: 6ch;
   border: none;
@@ -5502,51 +5542,6 @@ body.plans-view .view.active > * {
 .editor-details .detail-row {
   gap: 12px;
 }
-.editor-detail-website-row .editor-detail-value {
-  flex: 0 1 auto !important;
-  width: auto !important;
-  max-width: 72% !important;
-  margin-left: auto;
-  flex-wrap: nowrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 6px;
-  min-width: 0;
-}
-.editor-detail-website-link-wrap {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 100%;
-}
-.editor-detail-author-icon-btn {
-  flex-shrink: 0;
-  margin: 0;
-}
-.editor-detail-author-clear {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-  padding: 0;
-  margin: 0;
-  border: none;
-  border-radius: 50%;
-  background: transparent;
-  color: var(--text-dim);
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: color 0.2s, background 0.2s;
-}
-.editor-detail-author-clear:hover {
-  color: #f87171;
-  background: rgba(248, 113, 113, 0.12);
-}
 .editor-detail-value {
   display: inline-flex;
   align-items: center;
@@ -5563,25 +5558,80 @@ body.plans-view .view.active > * {
 .editor-detail-editable:focus-within {
   background: rgba(255, 255, 255, 0.02);
 }
-.editor-detail-website-value {
+/* Website + Version: shrink-wrap the value cluster on the right */
+#view-admin-editor .editor-flat .editor-details-live .editor-detail-website-row > .editor-detail-value,
+#view-admin-editor .editor-flat .editor-details-live .editor-detail-version-row > .editor-detail-value,
+.editor-detail-website-row .editor-detail-value,
+.editor-detail-version-row .editor-detail-value,
+.editor-detail-version-value {
+  display: inline-flex !important;
+  flex: 0 0 auto !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 0 !important;
+  width: fit-content !important;
+  max-width: 72% !important;
+  min-width: 0 !important;
+  margin-left: auto !important;
+}
+.editor-detail-website-link-wrap,
+.editor-detail-version-inner {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  flex: 0 0 auto !important;
+  width: fit-content !important;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0 !important;
   gap: 6px;
 }
-.editor-detail-website-value .editor-detail-website-link-wrap {
-  margin-left: 0;
+.editor-detail-version-inner {
+  gap: 0;
+}
+.editor-detail-author-icon-btn {
+  flex: 0 0 auto !important;
+  margin: 0 !important;
+}
+.editor-detail-author-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  margin: 0;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  flex: 0 0 auto;
+  transition: color 0.2s, background 0.2s;
+}
+.editor-detail-author-clear[hidden] {
+  display: none !important;
+}
+.editor-detail-author-clear:hover {
+  color: #f87171;
+  background: rgba(248, 113, 113, 0.12);
 }
 .editor-detail-website-input {
+  flex: 0 0 auto !important;
   field-sizing: content;
-  flex: 0 1 auto;
-  width: auto;
-  min-width: 10ch;
-  max-width: 22ch;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 18ch;
   border: none;
   background: transparent;
   color: var(--accent-bright);
   font-family: var(--font);
   font-size: 14px;
   font-weight: 700;
-  text-align: right;
+  text-align: left;
   padding: 0 0 2px;
   margin: 0;
   border-radius: 0;
@@ -5604,7 +5654,7 @@ body.plans-view .view.active > * {
 }
 .editor-detail-website-arrow {
   color: var(--accent-bright);
-  flex-shrink: 0;
+  flex: 0 0 auto;
 }
 .editor-detail-plain-input {
   min-width: 0;
@@ -5626,38 +5676,27 @@ body.plans-view .view.active > * {
   background: var(--surface-3);
   outline: none;
 }
-.editor-detail-version-value {
-  flex: 0 1 auto !important;
-  width: auto !important;
-  max-width: 50% !important;
-  margin-left: auto;
-  justify-content: flex-end;
-}
-.editor-detail-version-inner {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0;
-  margin-left: 0;
-}
 .editor-detail-version-prefix {
   color: var(--text-muted);
   font-size: 14px;
   font-weight: 500;
   line-height: 1;
-  flex-shrink: 0;
+  flex: 0 0 auto !important;
+  margin: 0;
+  padding: 0;
 }
 .editor-detail-version-input {
-  width: auto;
-  min-width: 2ch;
-  max-width: 18ch;
+  flex: 0 0 auto !important;
+  width: 4ch !important;
+  min-width: 3ch !important;
+  max-width: 10ch !important;
   border: none;
   background: transparent;
   color: var(--text-muted);
   font-family: var(--font);
   font-size: 14px;
   font-weight: 500;
-  text-align: right;
+  text-align: left;
   padding: 0;
   margin: 0;
   border-radius: 0;
@@ -5671,18 +5710,6 @@ body.plans-view .view.active > * {
 }
 .editor-detail-version-inner:focus-within {
   box-shadow: 0 1px 0 var(--accent-line);
-}
-#view-admin-editor .editor-flat .editor-details-live .editor-detail-website-row > .editor-detail-value,
-#view-admin-editor .editor-flat .editor-details-live .detail-row > .editor-detail-version-value {
-  flex: 0 1 auto;
-  width: auto;
-  max-width: none;
-  margin-left: auto;
-  justify-content: flex-end;
-}
-#view-admin-editor .editor-flat .editor-details-live .editor-detail-website-link-wrap {
-  margin-left: 0;
-  justify-content: flex-end;
 }
 .editor-detail-tags-value {
   display: flex;
