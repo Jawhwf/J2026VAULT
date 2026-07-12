@@ -3516,9 +3516,36 @@ function syncEditorCompactInputWidths() {
     const len = Math.max(min, Math.min(max, (raw.length || min) + pad));
     el.style.setProperty('width', `${len}ch`, 'important');
   };
+  const fitWebsite = el => {
+    if (!el) return;
+    const text = String(el.value || el.placeholder || 'w');
+    const cs = window.getComputedStyle(el);
+    const mirror = document.createElement('span');
+    mirror.textContent = text;
+    mirror.setAttribute('aria-hidden', 'true');
+    mirror.style.cssText = [
+      'position:absolute',
+      'left:-9999px',
+      'top:0',
+      'visibility:hidden',
+      'white-space:pre',
+      `font-family:${cs.fontFamily}`,
+      `font-size:${cs.fontSize}`,
+      `font-weight:${cs.fontWeight}`,
+      `font-style:${cs.fontStyle}`,
+      `letter-spacing:${cs.letterSpacing}`,
+      'padding:0',
+      'margin:0',
+      'border:0',
+    ].join(';');
+    document.body.appendChild(mirror);
+    const width = Math.ceil(mirror.getBoundingClientRect().width) + 2;
+    mirror.remove();
+    el.style.setProperty('width', `${Math.max(width, 8)}px`, 'important');
+  };
   fit(editorPrice, { min: 3, max: 6, pad: 0 });
   fit(editorVersion, { min: 3, max: 8, pad: 0 });
-  fit(editorWebsite, { min: 10, max: 16, pad: 0 });
+  fitWebsite(editorWebsite);
   fit(editorDownloads, { min: 2, max: 4, pad: 0 });
   fit(editorFavs, { min: 1, max: 3, pad: 0 });
   if (editorDetailVersion) editorDetailVersion.style.removeProperty('width');
