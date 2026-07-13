@@ -5515,7 +5515,7 @@ async function saveCatalogProducts() {
   let apiOk = false;
   try {
     await resolveMembersApiUrl();
-    if (readMembersApiUrl() && canAccessVaultAdmin()) {
+    if (readMembersApiUrl() && (canAccessVaultAdmin() || isVaultOwnerIdentity())) {
       await membersApiFetch('/api/catalog', { method: 'PUT', body: { products: live } });
       apiOk = true;
     }
@@ -5526,9 +5526,64 @@ async function saveCatalogProducts() {
   const cacheOk = await persistCatalogEverywhere(live, { quiet: true });
 
   if (apiOk || cacheOk) return true;
-  // Silent fail for sync noise — catalog still lives in memory this session
   console.warn('catalog save failed (API + device cache)');
   return false;
+}
+
+/** Push this device's catalog to the shared API/products.json when we're ahead. */
+async function syncLocalCatalogToServer({ force = false } = {}) {
+  const live = PRODUCTS.filter(p => !isExampleProduct(p));
+  if (!live.length) return { ok: false, reason: 'empty' };
+  if (!(canAccessVaultAdmin() || isVaultOwnerIdentity())) {
+    return { ok: false, reason: 'not-owner' };
+  }
+
+  try {
+    await resolveMembersApiUrl();
+  } catch {}
+
+  let base = readMembersApiUrl();
+  // Mini App on GitHub Pages can't use http://127.0.0.1 (mixed content) — need public HTTPS URL
+  if (!base) return { ok: false, reason: 'no-api' };
+
+  let remote = [];
+  try {
+    remote = await fetchCatalogFromApi() || [];
+  } catch {
+    remote = [];
+  }
+
+  const localFresh = catalogFreshness(live);
+  const remoteFresh = catalogFreshness(remote);
+  const ahead = force || live.length > remote.length || localFresh > remoteFresh;
+  if (!ahead) return { ok: true, reason: 'already-synced', count: live.length };
+
+  try {
+    await membersApiFetch('/api/catalog', { method: 'PUT', body: { products: live } });
+    await persistCatalogEverywhere(live, { quiet: true });
+    return { ok: true, reason: 'pushed', count: live.length };
+  } catch (err) {
+    console.warn('catalog sync push failed', err);
+    return { ok: false, reason: 'push-failed', error: String(err?.message || err) };
+  }
+}
+
+function downloadProductsJsonExport() {
+  const live = PRODUCTS.filter(p => !isExampleProduct(p));
+  const payload = {
+    updatedAt: new Date().toISOString(),
+    products: live,
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2) + '\n'], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'products.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  return live.length;
 }
 
 async function loadCatalogProducts() {
@@ -5553,6 +5608,14 @@ async function loadCatalogProducts() {
   // Hard guard: never replace a non-empty local catalog with empty remote
   PRODUCTS = (!merged.length && local.length) ? local : merged;
   await persistCatalogEverywhere(PRODUCTS, { quiet: true });
+
+  // Owner devices that still have posts locally should push them up for Windows / other phones
+  if (PRODUCTS.length && (isVaultOwnerIdentity() || canAccessVaultAdmin())) {
+    const remoteCount = normalizeCatalogList(remote).length;
+    if (PRODUCTS.length > remoteCount) {
+      syncLocalCatalogToServer({ force: remoteCount === 0 }).catch(() => {});
+    }
+  }
 }
 
 function syncCatalogUI() {
@@ -6296,6 +6359,46 @@ function renderAdminPanel() {
 }
 
 document.getElementById('adminAddPostBtn')?.addEventListener('click', () => openAdminEditor());
+
+document.getElementById('adminExportCatalogBtn')?.addEventListener('click', () => {
+  const n = downloadProductsJsonExport();
+  if (!n) {
+    showToast('No catalog posts to export');
+    return;
+  }
+  showToast(`Downloaded products.json (${n} post${n === 1 ? '' : 's'})`);
+});
+
+document.getElementById('adminSyncCatalogBtn')?.addEventListener('click', async () => {
+  const btn = document.getElementById('adminSyncCatalogBtn');
+  if (btn) btn.disabled = true;
+  try {
+    const result = await syncLocalCatalogToServer({ force: true });
+    if (result.ok && (result.reason === 'pushed' || result.reason === 'already-synced')) {
+      showToast(
+        result.reason === 'pushed'
+          ? `Synced ${result.count} post${result.count === 1 ? '' : 's'} — still upload products.json to GitHub Pages for Windows`
+          : 'Server already has this catalog'
+      );
+      // Always offer a local products.json so it can be committed for Pages
+      if (PRODUCTS.length) downloadProductsJsonExport();
+      return;
+    }
+    if (result.reason === 'empty') {
+      showToast('No posts on this device to sync');
+      return;
+    }
+    // API unreachable from GitHub Pages without a public HTTPS tunnel — export for manual upload
+    const n = downloadProductsJsonExport();
+    showToast(
+      n
+        ? 'API not reachable — downloaded products.json. Put it in the project folder and push to GitHub.'
+        : 'Nothing to sync'
+    );
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+});
 document.getElementById('openVaultAdminBtn')?.addEventListener('click', () => {
   if (canAccessVaultAdmin()) {
     showView('admin');

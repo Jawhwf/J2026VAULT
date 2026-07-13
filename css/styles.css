@@ -3421,8 +3421,19 @@ body.plans-view .view.active > * {
   border-color: rgba(248, 113, 113, 0.45);
   box-shadow: 0 8px 24px -16px rgba(248, 113, 113, 0.35);
 }
-.admin-entry-card--danger .admin-entry-eyebrow {
-  color: #fca5a5;
+.admin-item-count { margin-bottom: 10px; }
+.admin-sync-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.admin-sync-btn {
+  flex: 1 1 140px;
+  min-height: 40px;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 10px 12px;
 }
 .admin-entry-icon {
   width: 42px;
