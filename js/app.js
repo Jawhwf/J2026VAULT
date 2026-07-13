@@ -1115,9 +1115,39 @@ function getTelegramInitData() {
   return String(window.Telegram?.WebApp?.initData || '').trim();
 }
 
+function isUsableMembersApiUrl(url) {
+  const clean = String(url || '').trim().replace(/\/$/, '');
+  if (!clean || !/^https?:\/\//i.test(clean)) return false;
+  // GitHub Pages is HTTPS — browsers block http://127.0.0.1 (mixed content)
+  if (location.protocol === 'https:' && /^http:\/\//i.test(clean)) return false;
+  return true;
+}
+
+function membersApiUrlFromPage() {
+  try {
+    const params = new URLSearchParams(location.search || '');
+    const fromQuery = String(params.get('api') || params.get('membersApi') || '').trim().replace(/\/$/, '');
+    if (isUsableMembersApiUrl(fromQuery)) return fromQuery;
+  } catch {}
+  try {
+    const startParam = String(
+      window.Telegram?.WebApp?.initDataUnsafe?.start_param
+      || new URLSearchParams(location.hash.replace(/^#/, '')).get('tgWebAppStartParam')
+      || ''
+    ).trim();
+    // Optional: startapp payload like api_<url-encoded https url>
+    if (startParam.startsWith('api_')) {
+      const decoded = decodeURIComponent(startParam.slice(4));
+      if (isUsableMembersApiUrl(decoded)) return decoded.replace(/\/$/, '');
+    }
+  } catch {}
+  return '';
+}
+
 function readMembersApiUrl() {
   try {
-    return String(localStorage.getItem(MEMBERS_API_URL_KEY) || '').trim().replace(/\/$/, '');
+    const stored = String(localStorage.getItem(MEMBERS_API_URL_KEY) || '').trim().replace(/\/$/, '');
+    return isUsableMembersApiUrl(stored) ? stored : '';
   } catch {
     return '';
   }
@@ -1126,7 +1156,7 @@ function readMembersApiUrl() {
 function writeMembersApiUrl(url) {
   try {
     const clean = String(url || '').trim().replace(/\/$/, '');
-    if (clean) localStorage.setItem(MEMBERS_API_URL_KEY, clean);
+    if (isUsableMembersApiUrl(clean)) localStorage.setItem(MEMBERS_API_URL_KEY, clean);
     else localStorage.removeItem(MEMBERS_API_URL_KEY);
   } catch {}
 }
@@ -1140,28 +1170,50 @@ function detectVisitSource() {
 }
 
 async function resolveMembersApiUrl() {
-  const existing = readMembersApiUrl();
-  if (existing) return existing;
+  // Bot menu injects ?api=https://… so every device gets the live shared catalog API
+  const fromPage = membersApiUrlFromPage();
+  if (fromPage) {
+    writeMembersApiUrl(fromPage);
+    return fromPage;
+  }
+
+  // Mini App served from the public tunnel → API is same origin
+  const host = (location.hostname || '').toLowerCase();
+  if (
+    location.protocol === 'https:'
+    && (host.endsWith('.pinggy.net')
+      || host.endsWith('.pinggy-free.link')
+      || host.endsWith('.trycloudflare.com')
+      || host.endsWith('.lhr.life'))
+  ) {
+    const origin = location.origin.replace(/\/$/, '');
+    writeMembersApiUrl(origin);
+    return origin;
+  }
 
   const fromConfig = String(window.VAULT_CONFIG?.MEMBERS_API_URL || '').trim().replace(/\/$/, '');
-  if (fromConfig) {
+  if (isUsableMembersApiUrl(fromConfig)) {
     writeMembersApiUrl(fromConfig);
     return fromConfig;
   }
 
-  try {
-    const res = await fetch(`members-api-url.json?t=${Date.now()}`, { cache: 'no-store' });
-    if (res.ok) {
-      const data = await res.json();
-      const url = String(data?.url || '').trim().replace(/\/$/, '');
-      if (url) {
-        writeMembersApiUrl(url);
-        return url;
+  if (location.protocol !== 'file:') {
+    try {
+      const res = await fetch(`members-api-url.json?t=${Date.now()}`, { cache: 'no-store' });
+      if (res.ok) {
+        const data = await res.json();
+        const url = String(data?.url || '').trim().replace(/\/$/, '');
+        if (isUsableMembersApiUrl(url)) {
+          writeMembersApiUrl(url);
+          return url;
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
 
-  const host = (location.hostname || '').toLowerCase();
+  const existing = readMembersApiUrl();
+  if (existing) return existing;
+
   if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || location.protocol === 'file:') {
     const local = 'http://127.0.0.1:8765';
     writeMembersApiUrl(local);
@@ -6360,45 +6412,6 @@ function renderAdminPanel() {
 
 document.getElementById('adminAddPostBtn')?.addEventListener('click', () => openAdminEditor());
 
-document.getElementById('adminExportCatalogBtn')?.addEventListener('click', () => {
-  const n = downloadProductsJsonExport();
-  if (!n) {
-    showToast('No catalog posts to export');
-    return;
-  }
-  showToast(`Downloaded products.json (${n} post${n === 1 ? '' : 's'})`);
-});
-
-document.getElementById('adminSyncCatalogBtn')?.addEventListener('click', async () => {
-  const btn = document.getElementById('adminSyncCatalogBtn');
-  if (btn) btn.disabled = true;
-  try {
-    const result = await syncLocalCatalogToServer({ force: true });
-    if (result.ok && (result.reason === 'pushed' || result.reason === 'already-synced')) {
-      showToast(
-        result.reason === 'pushed'
-          ? `Synced ${result.count} post${result.count === 1 ? '' : 's'} — still upload products.json to GitHub Pages for Windows`
-          : 'Server already has this catalog'
-      );
-      // Always offer a local products.json so it can be committed for Pages
-      if (PRODUCTS.length) downloadProductsJsonExport();
-      return;
-    }
-    if (result.reason === 'empty') {
-      showToast('No posts on this device to sync');
-      return;
-    }
-    // API unreachable from GitHub Pages without a public HTTPS tunnel — export for manual upload
-    const n = downloadProductsJsonExport();
-    showToast(
-      n
-        ? 'API not reachable — downloaded products.json. Put it in the project folder and push to GitHub.'
-        : 'Nothing to sync'
-    );
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-});
 document.getElementById('openVaultAdminBtn')?.addEventListener('click', () => {
   if (canAccessVaultAdmin()) {
     showView('admin');
