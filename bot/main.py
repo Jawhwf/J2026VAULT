@@ -554,34 +554,74 @@ if __name__ == "__main__":
     except Exception as err:
         print(f"Members API failed: {err}", flush=True)
 
+    def _webapp_url_with_api(api_base: str = "", *, host_on_tunnel: bool = True) -> str:
+        """Build Mini App URL. Prefer tunnel host (live files + API); fall back to Pages + ?api=."""
+        from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+        api_clean = str(api_base or "").strip().rstrip("/")
+        pages = str(WEBAPP_URL or "").strip()
+        if host_on_tunnel and api_clean:
+            base = f"{api_clean}/"
+        else:
+            base = pages or (f"{api_clean}/" if api_clean else "")
+        if not base:
+            return ""
+        parts = urlsplit(base)
+        query = dict(parse_qsl(parts.query, keep_blank_values=True))
+        if api_clean:
+            query["api"] = api_clean
+        else:
+            query.pop("api", None)
+        path = parts.path or "/"
+        return urlunsplit((parts.scheme, parts.netloc, path, urlencode(query), parts.fragment))
+
+    def _publish_public_api_url(api_base: str) -> None:
+        """Point the Telegram menu Mini App at the live API so every device shares one catalog."""
+        api_clean = str(api_base or "").strip().rstrip("/")
+        if not api_clean:
+            return
+        # Try serving the app from the tunnel first (no GitHub upload needed for JS).
+        # If Telegram rejects that domain, fall back to GitHub Pages + ?api=.
+        for host_on_tunnel in (True, False):
+            menu_url = _webapp_url_with_api(api_clean, host_on_tunnel=host_on_tunnel)
+            try:
+                bot.set_chat_menu_button(
+                    menu_button=types.MenuButtonWebApp(
+                        type="web_app",
+                        text="Open Vault",
+                        web_app=types.WebAppInfo(url=menu_url),
+                    )
+                )
+                print(f"Mini App menu button → {menu_url}", flush=True)
+                return
+            except Exception as err:
+                print(f"set_chat_menu_button failed ({'tunnel' if host_on_tunnel else 'pages'}): {err}", flush=True)
+
     public_api = str(MEMBERS_API_PUBLIC_URL or "").strip().rstrip("/")
     if public_api:
         try:
-            import json as _json
-            from datetime import datetime, timezone
+            from public_tunnel import write_members_api_url
 
-            out = BOT_DIR.parent / "members-api-url.json"
-            out.write_text(
-                _json.dumps(
-                    {
-                        "url": public_api,
-                        "updatedAt": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
-                    },
-                    indent=2,
-                )
-                + "\n",
-                encoding="utf-8",
-            )
+            write_members_api_url(public_api)
             print(f"Public members API URL written: {public_api}", flush=True)
+            _publish_public_api_url(public_api)
         except Exception as err:
             print(f"members-api-url.json write failed: {err}", flush=True)
     else:
-        print(
-            "Tip: set MEMBERS_API_PUBLIC_URL or run ./bot/run-public-api.sh so Mini App users sync live.",
-            flush=True,
-        )
+        # Auto-expose 8765 over HTTPS so catalog posts sync to every Mini App user.
+        try:
+            from public_tunnel import start_public_tunnel
 
-    # Ensure root members.json mirror exists for GitHub Pages
+            start_public_tunnel(port=int(MEMBERS_API_PORT), on_url=_publish_public_api_url)
+            print("Public HTTPS tunnel starting (Pinggy)…", flush=True)
+        except Exception as err:
+            print(f"Public tunnel failed: {err}", flush=True)
+            print(
+                "Tip: set MEMBERS_API_PUBLIC_URL or run ./bot/run-public-api.sh",
+                flush=True,
+            )
+
+    # Ensure root members.json + products.json mirrors exist for GitHub Pages
     try:
         from members_store import load_store, save_store
 
@@ -589,6 +629,22 @@ if __name__ == "__main__":
         print(f"Members mirror: {BOT_DIR.parent / 'members.json'}", flush=True)
     except Exception as err:
         print(f"members mirror skipped: {err}", flush=True)
+
+    try:
+        from catalog_store import load_store as load_catalog, replace_all_products
+
+        replace_all_products(load_catalog().get("products") or [])
+        print(f"Catalog mirror: {BOT_DIR.parent / 'products.json'}", flush=True)
+    except Exception as err:
+        print(f"catalog mirror skipped: {err}", flush=True)
+
+    try:
+        from accent_store import load_accent
+
+        accent = load_accent()
+        print(f"Accent mirror: {BOT_DIR.parent / 'accent-theme.json'} ({accent.get('theme')})", flush=True)
+    except Exception as err:
+        print(f"accent mirror skipped: {err}", flush=True)
 
     try:
         bot.delete_webhook(drop_pending_updates=False)

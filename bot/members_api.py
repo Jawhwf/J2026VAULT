@@ -1,13 +1,19 @@
-"""Tiny HTTP API for Mini App member sync (stdlib only)."""
+"""Tiny HTTP API for Mini App member sync (stdlib only).
+
+Also serves the Mini App static files from the project root so a public tunnel
+can host both the UI and /api on the same HTTPS origin.
+"""
 
 from __future__ import annotations
 
 import hashlib
 import hmac
 import json
+import mimetypes
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from urllib.parse import parse_qs, urlparse
+from pathlib import Path
+from urllib.parse import parse_qs, unquote, urlparse
 
 from members_store import (
     get_member,
@@ -23,6 +29,16 @@ from avatars import fetch_profile_photo_data_url
 
 OWNER_IDS = {6690519994, 1866326493}
 OWNER_USERNAMES = {"j2026vault", "kiselomlqko", "yogurt"}
+
+STATIC_ROOT = Path(__file__).resolve().parent.parent
+_STATIC_BLOCK = (
+    ".venv/",
+    ".git/",
+    "bot/config.py",
+    "bot/logs/",
+    "bot/data/",
+    "bot/__pycache__/",
+)
 
 
 def _parse_init_data(init_data: str) -> dict:
@@ -113,6 +129,57 @@ def build_handler(bot_token: str):
             self._cors()
             self.end_headers()
 
+        def _blocked_static(self, rel: str) -> bool:
+            norm = rel.replace("\\", "/").lstrip("/")
+            lower = norm.lower()
+            for prefix in _STATIC_BLOCK:
+                if lower == prefix.rstrip("/").lower() or lower.startswith(prefix.lower()):
+                    return True
+            if lower.endswith(".py") and lower.startswith("bot/"):
+                return True
+            return False
+
+        def _serve_static(self) -> bool:
+            raw = unquote(urlparse(self.path).path or "/")
+            if raw.startswith("/api/") or raw in (
+                "/api",
+                "/health",
+                "/catalog",
+                "/products",
+                "/accent",
+                "/theme",
+                "/me",
+                "/members",
+                "/stats",
+            ):
+                return False
+            rel = "index.html" if raw in ("", "/") else raw.lstrip("/")
+            if ".." in Path(rel).parts or self._blocked_static(rel):
+                self._json(404, {"ok": False, "error": "Not found"})
+                return True
+            file_path = (STATIC_ROOT / rel).resolve()
+            try:
+                file_path.relative_to(STATIC_ROOT.resolve())
+            except ValueError:
+                self._json(404, {"ok": False, "error": "Not found"})
+                return True
+            if not file_path.is_file():
+                return False
+            try:
+                data = file_path.read_bytes()
+            except OSError:
+                self._json(404, {"ok": False, "error": "Not found"})
+                return True
+            ctype = mimetypes.guess_type(str(file_path))[0] or "application/octet-stream"
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(data)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(data)
+            return True
+
         def do_GET(self):
             path = urlparse(self.path).path.rstrip("/") or "/"
 
@@ -129,6 +196,25 @@ def build_handler(bot_token: str):
             if path in ("/api/accent", "/accent", "/api/theme", "/theme"):
                 data = load_accent()
                 return self._json(200, {"ok": True, **data})
+
+            # Public discovery file for the live API base (same origin when tunneled)
+            if path in ("/api/public-url", "/public-url"):
+                try:
+                    from public_tunnel import current_public_url
+
+                    url = current_public_url() or ""
+                except Exception:
+                    url = ""
+                if not url:
+                    try:
+                        data = json.loads((STATIC_ROOT / "members-api-url.json").read_text(encoding="utf-8"))
+                        url = str((data or {}).get("url") or "").strip()
+                    except Exception:
+                        url = ""
+                return self._json(200, {"ok": True, "url": url})
+
+            if self._serve_static():
+                return
 
             user = self._auth_user()
             if not user:
