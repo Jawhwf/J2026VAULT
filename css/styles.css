@@ -3413,6 +3413,17 @@ body.plans-view .view.active > * {
   transform: translateY(-1px);
   box-shadow: 0 8px 24px -16px var(--accent-glow);
 }
+.admin-entry-card--danger .admin-entry-icon {
+  background: rgba(248, 113, 113, 0.12);
+  color: #fca5a5;
+}
+.admin-entry-card--danger:hover {
+  border-color: rgba(248, 113, 113, 0.45);
+  box-shadow: 0 8px 24px -16px rgba(248, 113, 113, 0.35);
+}
+.admin-entry-card--danger .admin-entry-eyebrow {
+  color: #fca5a5;
+}
 .admin-entry-icon {
   width: 42px;
   height: 42px;

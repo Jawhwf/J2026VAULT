@@ -2987,6 +2987,7 @@ function setCelebrateMode(mode, planKey = null) {
     'mode-purchase', 'mode-download', 'mode-fav-add', 'mode-fav-remove', 'mode-subscription',
     'mode-catalog-save', 'mode-catalog-reset', 'mode-catalog-reset-done',
     'mode-catalog-delete', 'mode-catalog-delete-done',
+    'mode-local-reset', 'mode-local-reset-done',
     'mode-sub-lurker', 'mode-sub-leaker', 'mode-sub-heavenly',
   );
   celebratePanel.classList.add(`mode-${mode}`);
@@ -3207,6 +3208,125 @@ function showCatalogSaveCelebration(product) {
   fireConfetti({ count: 110, colors: ['#a78bfa', '#c4b5fd', '#e8e4ff', '#f9a8d4', '#fff'] });
 }
 
+function showLocalStorageResetConfirm() {
+  celebrateProduct = null;
+  celebratePlan = null;
+  celebrateMode = 'local-reset';
+  setCelebrateMode('local-reset');
+  setCelebrateIcon('trash');
+  setCelebrateSkip(false);
+
+  document.getElementById('celebrateEyebrow').textContent = 'Reset device data';
+  document.getElementById('celebrateTitle').textContent = 'Start fresh?';
+  document.getElementById('celebrateSub').textContent = 'Clears your downloads, purchases, favourites, and profile stats on this device — like opening the vault for the first time.';
+  document.getElementById('celebrateHint').hidden = true;
+
+  document.getElementById('celebratePrimary').textContent = 'Reset local storage';
+  document.getElementById('celebrateDismiss').textContent = 'Cancel';
+  document.getElementById('celebrateDismiss').hidden = false;
+  openCelebrateOverlay();
+}
+
+function showLocalStorageResetDone() {
+  celebrateProduct = null;
+  celebratePlan = null;
+  celebrateMode = 'local-reset-done';
+  setCelebrateMode('local-reset-done');
+  setCelebrateIcon('check');
+  setCelebrateSkip(false);
+
+  document.getElementById('celebrateEyebrow').textContent = 'Device reset';
+  document.getElementById('celebrateTitle').textContent = 'Local storage cleared';
+  document.getElementById('celebrateSub').textContent = 'Downloads, purchases, and favourites are back to zero on this device.';
+  document.getElementById('celebrateHint').hidden = true;
+
+  document.getElementById('celebratePrimary').textContent = 'Got it';
+  document.getElementById('celebrateDismiss').hidden = true;
+  openCelebrateOverlay();
+}
+
+function clearLocalUserStorageKeys() {
+  const keys = [
+    LIBRARY_STORAGE_KEY,
+    OWNED_STORAGE_KEY,
+    FAVORITES_STORAGE_KEY,
+    PURCHASES_SEEN_KEY,
+    FAVORITES_SEEN_KEY,
+    PROFILE_NAME_KEY,
+    FAV_MODAL_PREF,
+  ];
+  keys.forEach(key => {
+    try { localStorage.removeItem(key); } catch {}
+  });
+  // Per-account profile meta (downloads / purchases / custom avatar cache)
+  try {
+    const exact = profileStorageKey();
+    localStorage.removeItem(exact);
+  } catch {}
+  try {
+    const toRemove = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(`${PROFILE_META_KEY}:`)) toRemove.push(key);
+    }
+    toRemove.forEach(key => localStorage.removeItem(key));
+  } catch {}
+}
+
+async function resetLocalUserData() {
+  clearLocalUserStorageKeys();
+
+  library.clear();
+  owned.clear();
+  favorites.clear();
+  purchasesSeenCount = 0;
+  favoritesSeenCount = 0;
+  userStats.downloads = 0;
+  userStats.purchases = 0;
+
+  // Fresh profile shell — Telegram identity fills back in on sync
+  const fresh = defaultOwnProfile(telegramUser);
+  fresh.downloads = 0;
+  fresh.purchases = 0;
+  fresh.avatarDataUrl = null;
+  fresh.avatarCustom = false;
+  writeOwnProfileLocal(fresh);
+  upsertMemberInCache(fresh);
+
+  if (telegramUser) syncProfileFromTelegram(telegramUser);
+  updateProfileStats();
+  updateNavBadges();
+  renderPurchases();
+  renderFavourites();
+  filterProducts();
+  renderBundles();
+  updatePremiumUI();
+  updatePlansPageUI();
+  syncCatalogUI();
+
+  // Push zeroed stats so reload doesn’t restore old totals from the API
+  try {
+    await resolveMembersApiUrl();
+    if (readMembersApiUrl() && getTelegramInitData()) {
+      await membersApiFetch('/api/me/sync', {
+        method: 'POST',
+        body: {
+          ...fresh,
+          source: detectVisitSource(),
+          downloads: 0,
+          purchases: 0,
+          avatarCustom: false,
+          avatarDataUrl: null,
+        },
+      });
+    }
+  } catch (err) {
+    console.warn('local reset API sync skipped', err);
+  }
+
+  return true;
+}
+
 function showCatalogResetConfirm() {
   celebrateProduct = null;
   celebratePlan = null;
@@ -3349,7 +3469,7 @@ document.getElementById('celebrateDismiss').addEventListener('click', () => {
     openAdminEditor();
     return;
   }
-  if (mode === 'catalog-delete') {
+  if (mode === 'catalog-delete' || mode === 'local-reset') {
     closeCelebrate();
     return;
   }
@@ -3364,6 +3484,17 @@ celebrateOverlay.addEventListener('click', e => { if (e.target === celebrateOver
 document.getElementById('celebratePrimary').addEventListener('click', () => {
   const product = celebrateProduct;
   const mode = celebrateMode;
+  if (mode === 'local-reset') {
+    resetLocalUserData()
+      .then(() => showLocalStorageResetDone())
+      .catch(() => showLocalStorageResetDone());
+    return;
+  }
+  if (mode === 'local-reset-done') {
+    closeCelebrate();
+    showView('profile');
+    return;
+  }
   if (mode === 'catalog-reset') {
     loadEditorTemplate();
     closeCelebrate();
@@ -3402,6 +3533,8 @@ document.getElementById('celebratePrimary').addEventListener('click', () => {
   else if (mode === 'fav-add') showView('favourites');
   else if (mode === 'subscription') showView('catalog');
 });
+
+document.getElementById('resetLocalStorageBtn')?.addEventListener('click', showLocalStorageResetConfirm);
 
 /* ── DOM refs ── */
 const appWindow = document.getElementById('appWindow');
